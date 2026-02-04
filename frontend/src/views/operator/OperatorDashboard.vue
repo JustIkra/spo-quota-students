@@ -31,7 +31,7 @@ onMounted(async () => {
   <div class="dashboard">
     <h1 class="page-title">Панель оператора</h1>
     <p class="spo-name" v-if="auth.user?.spo_name">
-      СПО: {{ auth.user.spo_name }}
+      Учреждение: {{ auth.user.spo_name }}
     </p>
 
     <div v-if="loading" class="loading">Загрузка...</div>

@@ -39,7 +39,7 @@ watch(() => props.show, (newVal) => {
 function validate() {
   errors.value = {}
   if (!form.value.spo_id) {
-    errors.value.spo_id = 'Выберите СПО'
+    errors.value.spo_id = 'Выберите учреждение'
   }
   return Object.keys(errors.value).length === 0
 }
@@ -67,7 +67,7 @@ async function submit() {
     <form class="form" @submit.prevent="submit">
       <AppSelect
         v-model="form.spo_id"
-        label="СПО"
+        label="Учреждение"
         :options="spoOptions"
         :error="errors.spo_id"
         required

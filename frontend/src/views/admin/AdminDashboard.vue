@@ -36,7 +36,7 @@ onMounted(async () => {
     <div v-else class="stats-grid">
       <RouterLink to="/admin/spo" class="stat-card">
         <div class="stat-value">{{ spoCount }}</div>
-        <div class="stat-label">СПО</div>
+        <div class="stat-label">Учреждений</div>
       </RouterLink>
 
       <RouterLink to="/admin/operators" class="stat-card">
@@ -54,7 +54,7 @@ onMounted(async () => {
       <h2 class="section-title">Быстрые действия</h2>
       <div class="links-grid">
         <RouterLink to="/admin/spo" class="link-card">
-          Управление СПО
+          Управление учреждениями
         </RouterLink>
         <RouterLink to="/admin/operators" class="link-card">
           Управление операторами

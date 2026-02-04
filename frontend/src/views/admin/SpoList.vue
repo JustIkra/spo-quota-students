@@ -95,15 +95,15 @@ async function deleteSpo() {
 <template>
   <div class="spo-list">
     <div class="page-header">
-      <h1 class="page-title">Список СПО</h1>
-      <AppButton @click="openCreateForm">Добавить СПО</AppButton>
+      <h1 class="page-title">Список учреждений</h1>
+      <AppButton @click="openCreateForm">Добавить учреждение</AppButton>
     </div>
 
     <AppTable
       :columns="columns"
       :data="spoList"
       :loading="loading"
-      empty-text="Нет зарегистрированных СПО"
+      empty-text="Нет зарегистрированных учреждений"
     >
       <template #created_at="{ value }">
         {{ formatDate(value) }}
@@ -132,7 +132,7 @@ async function deleteSpo() {
       title="Подтверждение удаления"
       @close="showDeleteModal = false"
     >
-      <p>Вы уверены, что хотите удалить СПО "{{ deletingSpo?.name }}"?</p>
+      <p>Вы уверены, что хотите удалить учреждение "{{ deletingSpo?.name }}"?</p>
       <p class="warning">Это действие также удалит всех связанных операторов, специальности и студентов.</p>
 
       <template #footer>

@@ -8,7 +8,7 @@ const totalStats = ref({ total_quota: 0, total_students: 0 })
 const loading = ref(true)
 
 const columns = [
-  { key: 'spo_name', label: 'СПО' },
+  { key: 'spo_name', label: 'Учреждение' },
   { key: 'code', label: 'Код специальности' },
   { key: 'name', label: 'Специальность' },
   { key: 'quota', label: 'Квота', width: '100px' },
@@ -53,7 +53,7 @@ onMounted(async () => {
 
 <template>
   <div class="admin-stats">
-    <h1 class="page-title">Статистика по всем СПО</h1>
+    <h1 class="page-title">Статистика по всем учреждениям</h1>
 
     <div class="totals">
       <div class="total-card">

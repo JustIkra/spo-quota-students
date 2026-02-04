@@ -10,7 +10,7 @@ const navItems = computed(() => {
   if (auth.isAdmin) {
     return [
       { to: '/admin', label: 'Главная' },
-      { to: '/admin/spo', label: 'СПО' },
+      { to: '/admin/spo', label: 'Учреждения' },
       { to: '/admin/operators', label: 'Операторы' },
       { to: '/admin/quotas', label: 'Квоты' },
       { to: '/admin/stats', label: 'Статистика' }
@@ -34,7 +34,7 @@ function logout() {
   <div class="layout">
     <header class="header">
       <div class="header-content">
-        <div class="logo">Система учета квот СПО</div>
+        <div class="logo">Система учета квот</div>
         <nav class="nav">
           <RouterLink
             v-for="item in navItems"

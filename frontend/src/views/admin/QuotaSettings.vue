@@ -17,7 +17,7 @@ const editingQuota = ref(null)
 const quotaValue = ref('')
 
 const columns = [
-  { key: 'spo_name', label: 'СПО' },
+  { key: 'spo_name', label: 'Учреждение' },
   { key: 'code', label: 'Код' },
   { key: 'name', label: 'Название' },
   { key: 'quota', label: 'Квота', width: '100px' },

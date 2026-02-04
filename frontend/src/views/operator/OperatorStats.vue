@@ -55,7 +55,7 @@ onMounted(async () => {
   <div class="operator-stats">
     <h1 class="page-title">Статистика</h1>
     <p class="spo-name" v-if="auth.user?.spo_name">
-      СПО: {{ auth.user.spo_name }}
+      Учреждение: {{ auth.user.spo_name }}
     </p>
 
     <div class="totals">

@@ -43,7 +43,7 @@ async function submit() {
 <template>
   <div class="login-page">
     <div class="login-card">
-      <h1 class="title">Система учета квот СПО</h1>
+      <h1 class="title">Система учета квот</h1>
       <p class="subtitle">Вход в систему</p>
 
       <form class="form" @submit.prevent="submit">

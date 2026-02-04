@@ -25,7 +25,7 @@ const isPasswordReset = ref(false)
 const columns = [
   { key: 'id', label: 'ID', width: '80px' },
   { key: 'login', label: 'Логин' },
-  { key: 'spo_name', label: 'СПО' },
+  { key: 'spo_name', label: 'Учреждение' },
   { key: 'created_at', label: 'Дата создания', width: '180px' },
   { key: 'actions', label: 'Действия', width: '240px' }
 ]
