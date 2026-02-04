@@ -10,6 +10,7 @@ class SpecialtyStats(BaseModel):
     """Statistics for a single specialty."""
     specialty_id: int
     specialty_name: str
+    specialty_code: Optional[str] = None
     spo_id: int
     spo_name: str
     quota: int

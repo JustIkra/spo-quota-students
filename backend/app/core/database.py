@@ -22,10 +22,5 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
-def get_db():
-    """Dependency to get database session."""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+# Note: get_db dependency is defined in app.api.deps to avoid circular imports
+# and keep all API dependencies in one place

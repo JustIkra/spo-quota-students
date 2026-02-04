@@ -43,6 +43,11 @@ export const adminApi = {
     return response.data
   },
 
+  async resetOperatorPassword(id) {
+    const response = await api.post(`/admin/operators/${id}/reset-password`)
+    return response.data
+  },
+
   // Настройки квот
   async getSettings() {
     const response = await api.get('/admin/settings')

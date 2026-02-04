@@ -2,9 +2,12 @@
 import { ref, onMounted } from 'vue'
 import { adminApi } from '../../api/admin'
 import { statsApi } from '../../api/stats'
+import { useToastStore } from '../../stores/toast'
 import AppButton from '../../components/ui/AppButton.vue'
 import AppInput from '../../components/ui/AppInput.vue'
 import AppTable from '../../components/ui/AppTable.vue'
+
+const toast = useToastStore()
 
 const settings = ref({ base_quota: 0 })
 const specialties = ref([])
@@ -34,9 +37,25 @@ async function loadData() {
       statsApi.getStats()
     ])
     settings.value = settingsData
-    specialties.value = statsData
+
+    // Transform nested stats data to flat array for table display
+    const flatSpecialties = []
+    for (const spo of statsData.spo_list || []) {
+      for (const spec of spo.specialties || []) {
+        flatSpecialties.push({
+          specialty_id: spec.specialty_id,
+          spo_name: spo.spo_name,
+          code: spec.specialty_code || '',
+          name: spec.specialty_name,
+          quota: spec.quota,
+          enrolled: spec.students_count
+        })
+      }
+    }
+    specialties.value = flatSpecialties
   } catch (error) {
     console.error('Ошибка загрузки:', error)
+    toast.error('Ошибка загрузки данных')
   } finally {
     loading.value = false
   }
@@ -46,10 +65,10 @@ async function saveSettings() {
   savingSettings.value = true
   try {
     await adminApi.updateSettings({ base_quota: Number(settings.value.base_quota) })
-    alert('Настройки сохранены')
+    toast.success('Настройки сохранены')
   } catch (error) {
     console.error('Ошибка сохранения:', error)
-    alert('Ошибка сохранения: ' + (error.response?.data?.detail || 'Неизвестная ошибка'))
+    toast.error('Ошибка сохранения: ' + (error.response?.data?.detail || 'Неизвестная ошибка'))
   } finally {
     savingSettings.value = false
   }
@@ -70,10 +89,11 @@ async function saveQuota(specialty) {
     const quota = quotaValue.value ? Number(quotaValue.value) : null
     await adminApi.updateSpecialtyQuota(specialty.specialty_id, quota)
     editingQuota.value = null
+    toast.success('Квота обновлена')
     await loadData()
   } catch (error) {
     console.error('Ошибка сохранения квоты:', error)
-    alert('Ошибка: ' + (error.response?.data?.detail || 'Неизвестная ошибка'))
+    toast.error('Ошибка: ' + (error.response?.data?.detail || 'Неизвестная ошибка'))
   }
 }
 </script>

@@ -2,10 +2,12 @@
 FastAPI application entry point.
 """
 import logging
+import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from app.core.config import settings
 from app.core.database import engine, Base, SessionLocal
@@ -15,8 +17,12 @@ from app.services import init_settings
 from app.api import auth_router, admin_router, operator_router, stats_router
 
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Configure structured logging (SUGGEST-004)
+logging.basicConfig(
+    level=logging.INFO,
+    format='{"time":"%(asctime)s","level":"%(levelname)s","logger":"%(name)s","message":"%(message)s"}',
+    datefmt='%Y-%m-%dT%H:%M:%S'
+)
 logger = logging.getLogger(__name__)
 
 
@@ -77,14 +83,38 @@ app = FastAPI(
 )
 
 # Configure CORS
-cors_origins = settings.CORS_ORIGINS.split(",") if settings.CORS_ORIGINS != "*" else ["*"]
+if settings.CORS_ORIGINS == "*":
+    logger.warning(
+        "CORS_ORIGINS is set to '*' - credentials will be disabled. "
+        "Set specific origins for allow_credentials=True support."
+    )
+    cors_origins = ["*"]
+    allow_credentials = False
+else:
+    cors_origins = [origin.strip() for origin in settings.CORS_ORIGINS.split(",")]
+    allow_credentials = True
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
-    allow_credentials=True,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Request ID middleware for tracing (SUGGEST-002)
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    """Add X-Request-ID header to all requests for tracing."""
+    request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    # Store in request state for use in logging
+    request.state.request_id = request_id
+
+    response: Response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    return response
+
 
 # Include routers
 app.include_router(auth_router)
@@ -101,5 +131,26 @@ def root():
 
 @app.get("/health", tags=["Health"])
 def health_check():
-    """Health check endpoint."""
-    return {"status": "healthy"}
+    """
+    Health check endpoint with database connectivity check (SUGGEST-003).
+    Returns status of the application and its dependencies.
+    """
+    health_status = {
+        "status": "healthy",
+        "checks": {
+            "database": "unknown"
+        }
+    }
+
+    # Check database connectivity
+    try:
+        db = SessionLocal()
+        db.execute(text("SELECT 1"))
+        db.close()
+        health_status["checks"]["database"] = "healthy"
+    except Exception as e:
+        logger.error(f"Database health check failed: {e}")
+        health_status["status"] = "unhealthy"
+        health_status["checks"]["database"] = "unhealthy"
+
+    return health_status

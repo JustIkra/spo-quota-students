@@ -77,6 +77,20 @@ def create_operator(db: Session, spo_id: int, spo_name: str) -> tuple[User, str]
     return user, password
 
 
+def reset_password(db: Session, user_id: int) -> tuple[User, str]:
+    """Reset password for user, returning user and new password."""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise ValueError("User not found")
+
+    password = generate_password()
+    user.password_hash = get_password_hash(password)
+    db.commit()
+    db.refresh(user)
+
+    return user, password
+
+
 def authenticate_user(db: Session, login: str, password: str) -> Optional[User]:
     """Authenticate user by login and password."""
     user = db.query(User).filter(User.login == login).first()

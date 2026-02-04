@@ -1,10 +1,13 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { adminApi } from '../../api/admin'
+import { useToastStore } from '../../stores/toast'
 import AppButton from '../../components/ui/AppButton.vue'
 import AppTable from '../../components/ui/AppTable.vue'
 import OperatorForm from '../../components/forms/OperatorForm.vue'
 import AppModal from '../../components/ui/AppModal.vue'
+
+const toast = useToastStore()
 
 const operators = ref([])
 const spoList = ref([])
@@ -13,15 +16,18 @@ const showForm = ref(false)
 const showDeleteModal = ref(false)
 const deletingOperator = ref(null)
 const showPasswordModal = ref(false)
+const showResetModal = ref(false)
+const resettingOperator = ref(null)
 const generatedPassword = ref('')
 const createdLogin = ref('')
+const isPasswordReset = ref(false)
 
 const columns = [
   { key: 'id', label: 'ID', width: '80px' },
   { key: 'login', label: 'Логин' },
   { key: 'spo_name', label: 'СПО' },
   { key: 'created_at', label: 'Дата создания', width: '180px' },
-  { key: 'actions', label: 'Действия', width: '120px' }
+  { key: 'actions', label: 'Действия', width: '240px' }
 ]
 
 const operatorsWithSpo = computed(() => {
@@ -68,12 +74,13 @@ async function handleSubmit(data) {
     // Показываем сгенерированный пароль
     createdLogin.value = result.login
     generatedPassword.value = result.generated_password
+    isPasswordReset.value = false
     showPasswordModal.value = true
 
     await loadData()
   } catch (error) {
     console.error('Ошибка создания:', error)
-    alert('Ошибка создания: ' + (error.response?.data?.detail || 'Неизвестная ошибка'))
+    toast.error('Ошибка создания: ' + (error.response?.data?.detail || 'Неизвестная ошибка'))
   }
 }
 
@@ -92,13 +99,38 @@ async function deleteOperator() {
     await loadData()
   } catch (error) {
     console.error('Ошибка удаления:', error)
-    alert('Ошибка удаления: ' + (error.response?.data?.detail || 'Неизвестная ошибка'))
+    toast.error('Ошибка удаления: ' + (error.response?.data?.detail || 'Неизвестная ошибка'))
+  }
+}
+
+function confirmResetPassword(operator) {
+  resettingOperator.value = operator
+  showResetModal.value = true
+}
+
+async function resetPassword() {
+  if (!resettingOperator.value) return
+
+  try {
+    const result = await adminApi.resetOperatorPassword(resettingOperator.value.id)
+    showResetModal.value = false
+
+    // Show new password
+    createdLogin.value = result.login
+    generatedPassword.value = result.generated_password
+    isPasswordReset.value = true
+    showPasswordModal.value = true
+
+    resettingOperator.value = null
+  } catch (error) {
+    console.error('Ошибка сброса пароля:', error)
+    toast.error('Ошибка сброса пароля: ' + (error.response?.data?.detail || 'Неизвестная ошибка'))
   }
 }
 
 function copyPassword() {
   navigator.clipboard.writeText(generatedPassword.value)
-  alert('Пароль скопирован в буфер обмена')
+  toast.success('Пароль скопирован в буфер обмена')
 }
 </script>
 
@@ -119,9 +151,14 @@ function copyPassword() {
         {{ formatDate(value) }}
       </template>
       <template #actions="{ row }">
-        <AppButton variant="danger" @click="confirmDelete(row)">
-          Удалить
-        </AppButton>
+        <div class="action-buttons">
+          <AppButton variant="secondary" @click="confirmResetPassword(row)">
+            Сбросить пароль
+          </AppButton>
+          <AppButton variant="danger" @click="confirmDelete(row)">
+            Удалить
+          </AppButton>
+        </div>
       </template>
     </AppTable>
 
@@ -150,13 +187,32 @@ function copyPassword() {
     </AppModal>
 
     <AppModal
+      :show="showResetModal"
+      title="Сброс пароля"
+      @close="showResetModal = false"
+    >
+      <p>Вы уверены, что хотите сбросить пароль оператора "{{ resettingOperator?.login }}"?</p>
+      <p class="reset-warning">Текущий пароль станет недействительным.</p>
+
+      <template #footer>
+        <AppButton variant="secondary" @click="showResetModal = false">
+          Отмена
+        </AppButton>
+        <AppButton @click="resetPassword">
+          Сбросить
+        </AppButton>
+      </template>
+    </AppModal>
+
+    <AppModal
       :show="showPasswordModal"
-      title="Оператор создан"
+      :title="isPasswordReset ? 'Пароль сброшен' : 'Оператор создан'"
       @close="showPasswordModal = false"
     >
       <div class="password-info">
-        <p>Оператор <strong>{{ createdLogin }}</strong> успешно создан.</p>
-        <p>Сгенерированный пароль:</p>
+        <p v-if="isPasswordReset">Пароль оператора <strong>{{ createdLogin }}</strong> успешно сброшен.</p>
+        <p v-else>Оператор <strong>{{ createdLogin }}</strong> успешно создан.</p>
+        <p>{{ isPasswordReset ? 'Новый пароль:' : 'Сгенерированный пароль:' }}</p>
         <div class="password-box">
           <code>{{ generatedPassword }}</code>
           <AppButton variant="secondary" @click="copyPassword">
@@ -217,5 +273,16 @@ function copyPassword() {
   color: #dc2626;
   font-size: 14px;
   font-weight: 500;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.reset-warning {
+  color: #d97706;
+  font-size: 14px;
+  margin-top: 8px;
 }
 </style>

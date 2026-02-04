@@ -1,10 +1,13 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { operatorApi } from '../../api/operator'
+import { useToastStore } from '../../stores/toast'
 import AppButton from '../../components/ui/AppButton.vue'
 import AppTable from '../../components/ui/AppTable.vue'
 import SpecialtyForm from '../../components/forms/SpecialtyForm.vue'
 import AppModal from '../../components/ui/AppModal.vue'
+
+const toast = useToastStore()
 
 const specialties = ref([])
 const loading = ref(true)
@@ -42,7 +45,7 @@ async function handleSubmit(data) {
     await loadData()
   } catch (error) {
     console.error('Ошибка создания:', error)
-    alert('Ошибка: ' + (error.response?.data?.detail || 'Неизвестная ошибка'))
+    toast.error('Ошибка: ' + (error.response?.data?.detail || 'Неизвестная ошибка'))
   }
 }
 
@@ -61,7 +64,7 @@ async function deleteSpecialty() {
     await loadData()
   } catch (error) {
     console.error('Ошибка удаления:', error)
-    alert('Ошибка: ' + (error.response?.data?.detail || 'Неизвестная ошибка'))
+    toast.error('Ошибка: ' + (error.response?.data?.detail || 'Неизвестная ошибка'))
   }
 }
 </script>

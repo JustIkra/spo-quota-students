@@ -1,11 +1,14 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue'
 import { operatorApi } from '../../api/operator'
+import { useToastStore } from '../../stores/toast'
 import AppButton from '../../components/ui/AppButton.vue'
 import AppTable from '../../components/ui/AppTable.vue'
 import AppSelect from '../../components/ui/AppSelect.vue'
 import StudentForm from '../../components/forms/StudentForm.vue'
 import AppModal from '../../components/ui/AppModal.vue'
+
+const toast = useToastStore()
 
 const students = ref([])
 const specialties = ref([])
@@ -110,7 +113,7 @@ async function deleteStudent() {
     await loadData()
   } catch (error) {
     console.error('Ошибка удаления:', error)
-    alert('Ошибка: ' + (error.response?.data?.detail || 'Неизвестная ошибка'))
+    toast.error('Ошибка: ' + (error.response?.data?.detail || 'Неизвестная ошибка'))
   }
 }
 </script>

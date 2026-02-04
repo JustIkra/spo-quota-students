@@ -15,7 +15,7 @@ from app.schemas import (
     QuotaUpdate, SpecialtyResponse,
     SettingsResponse, SettingsUpdate
 )
-from app.services import create_operator, get_base_quota, set_base_quota
+from app.services import create_operator, reset_password, get_base_quota, set_base_quota
 
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
@@ -30,37 +30,67 @@ def list_spo(
 ):
     """
     Get list of all SPO with statistics.
+    Optimized to use aggregated subqueries instead of N+1 queries.
     """
-    spo_list = db.query(SPO).all()
-    result = []
+    # Subquery: count specialties per SPO
+    specialties_subq = (
+        db.query(
+            Specialty.spo_id,
+            func.count(Specialty.id).label("specialties_count")
+        )
+        .group_by(Specialty.spo_id)
+        .subquery()
+    )
 
-    for spo in spo_list:
-        # Count specialties
-        specialties_count = db.query(func.count(Specialty.id)).filter(
-            Specialty.spo_id == spo.id
-        ).scalar()
+    # Subquery: count students per SPO (via specialty)
+    students_subq = (
+        db.query(
+            Specialty.spo_id,
+            func.count(Student.id).label("students_count")
+        )
+        .join(Student, Student.specialty_id == Specialty.id)
+        .group_by(Specialty.spo_id)
+        .subquery()
+    )
 
-        # Count students
-        students_count = db.query(func.count(Student.id)).join(Specialty).filter(
-            Specialty.spo_id == spo.id
-        ).scalar()
+    # Subquery: count operators per SPO
+    operators_subq = (
+        db.query(
+            User.spo_id,
+            func.count(User.id).label("operators_count")
+        )
+        .filter(User.role == UserRole.OPERATOR)
+        .group_by(User.spo_id)
+        .subquery()
+    )
 
-        # Count operators
-        operators_count = db.query(func.count(User.id)).filter(
-            User.spo_id == spo.id,
-            User.role == UserRole.OPERATOR
-        ).scalar()
+    # Main query with all counts in single query
+    result = (
+        db.query(
+            SPO.id,
+            SPO.name,
+            SPO.created_at,
+            func.coalesce(specialties_subq.c.specialties_count, 0).label("specialties_count"),
+            func.coalesce(students_subq.c.students_count, 0).label("students_count"),
+            func.coalesce(operators_subq.c.operators_count, 0).label("operators_count")
+        )
+        .outerjoin(specialties_subq, SPO.id == specialties_subq.c.spo_id)
+        .outerjoin(students_subq, SPO.id == students_subq.c.spo_id)
+        .outerjoin(operators_subq, SPO.id == operators_subq.c.spo_id)
+        .all()
+    )
 
-        result.append(SPOWithStats(
-            id=spo.id,
-            name=spo.name,
-            created_at=spo.created_at,
-            specialties_count=specialties_count,
-            students_count=students_count,
-            operators_count=operators_count
-        ))
-
-    return result
+    return [
+        SPOWithStats(
+            id=row.id,
+            name=row.name,
+            created_at=row.created_at,
+            specialties_count=row.specialties_count,
+            students_count=row.students_count,
+            operators_count=row.operators_count
+        )
+        for row in result
+    ]
 
 
 @router.post("/spo", response_model=SPOResponse, status_code=status.HTTP_201_CREATED)
@@ -233,6 +263,38 @@ def delete_operator(
 
     db.delete(operator)
     db.commit()
+
+
+@router.post("/operators/{operator_id}/reset-password", response_model=UserWithPassword)
+def reset_operator_password(
+    operator_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin)
+):
+    """
+    Reset operator password. Returns new generated password.
+    """
+    operator = db.query(User).filter(
+        User.id == operator_id,
+        User.role == UserRole.OPERATOR
+    ).first()
+
+    if not operator:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Operator not found"
+        )
+
+    user, password = reset_password(db, operator_id)
+
+    return UserWithPassword(
+        id=user.id,
+        login=user.login,
+        role=user.role,
+        spo_id=user.spo_id,
+        created_at=user.created_at,
+        generated_password=password
+    )
 
 
 # ==================== Specialty Quota Management ====================

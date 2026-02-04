@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 class SpecialtyBase(BaseModel):
     """Base specialty schema."""
     name: str = Field(..., min_length=1, max_length=255)
+    code: Optional[str] = Field(None, max_length=50)
 
 
 class SpecialtyCreate(SpecialtyBase):
@@ -20,6 +21,7 @@ class SpecialtyCreate(SpecialtyBase):
 class SpecialtyUpdate(BaseModel):
     """Schema for updating specialty."""
     name: Optional[str] = Field(None, min_length=1, max_length=255)
+    code: Optional[str] = Field(None, max_length=50)
 
 
 class QuotaUpdate(BaseModel):

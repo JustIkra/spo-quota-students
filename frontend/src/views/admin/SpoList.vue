@@ -1,10 +1,13 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { adminApi } from '../../api/admin'
+import { useToastStore } from '../../stores/toast'
 import AppButton from '../../components/ui/AppButton.vue'
 import AppTable from '../../components/ui/AppTable.vue'
 import SpoForm from '../../components/forms/SpoForm.vue'
 import AppModal from '../../components/ui/AppModal.vue'
+
+const toast = useToastStore()
 
 const spoList = ref([])
 const loading = ref(true)
@@ -65,7 +68,7 @@ async function handleSubmit(data) {
     await loadData()
   } catch (error) {
     console.error('Ошибка сохранения:', error)
-    alert('Ошибка сохранения: ' + (error.response?.data?.detail || 'Неизвестная ошибка'))
+    toast.error('Ошибка сохранения: ' + (error.response?.data?.detail || 'Неизвестная ошибка'))
   }
 }
 
@@ -84,7 +87,7 @@ async function deleteSpo() {
     await loadData()
   } catch (error) {
     console.error('Ошибка удаления:', error)
-    alert('Ошибка удаления: ' + (error.response?.data?.detail || 'Неизвестная ошибка'))
+    toast.error('Ошибка удаления: ' + (error.response?.data?.detail || 'Неизвестная ошибка'))
   }
 }
 </script>

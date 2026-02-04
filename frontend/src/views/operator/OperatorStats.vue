@@ -6,29 +6,43 @@ import AppTable from '../../components/ui/AppTable.vue'
 
 const auth = useAuthStore()
 const stats = ref([])
+const totalStats = ref({ total_quota: 0, total_students: 0 })
 const loading = ref(true)
 
 const columns = [
   { key: 'code', label: 'Код специальности' },
   { key: 'name', label: 'Специальность' },
   { key: 'quota', label: 'Квота', width: '100px' },
-  { key: 'enrolled', label: 'Записано', width: '100px' },
-  { key: 'available', label: 'Свободно', width: '100px' }
+  { key: 'enrolled', label: 'Записано', width: '100px' }
 ]
 
 const totals = computed(() => {
-  const totalQuota = stats.value.reduce((sum, item) => sum + (item.quota || 0), 0)
-  const totalEnrolled = stats.value.reduce((sum, item) => sum + item.enrolled, 0)
   return {
-    quota: totalQuota,
-    enrolled: totalEnrolled,
-    available: totalQuota - totalEnrolled
+    quota: totalStats.value.total_quota,
+    enrolled: totalStats.value.total_students
   }
 })
 
 onMounted(async () => {
   try {
-    stats.value = await statsApi.getStats()
+    const data = await statsApi.getStats()
+    totalStats.value = {
+      total_quota: data.total_quota || 0,
+      total_students: data.total_students || 0
+    }
+    // Transform nested data to flat array for table
+    const flatStats = []
+    for (const spo of data.spo_list || []) {
+      for (const spec of spo.specialties || []) {
+        flatStats.push({
+          code: spec.specialty_code || '',
+          name: spec.specialty_name,
+          quota: spec.quota,
+          enrolled: spec.students_count
+        })
+      }
+    }
+    stats.value = flatStats
   } catch (error) {
     console.error('Ошибка загрузки статистики:', error)
   } finally {
@@ -53,12 +67,6 @@ onMounted(async () => {
         <div class="total-value">{{ totals.enrolled }}</div>
         <div class="total-label">Записано студентов</div>
       </div>
-      <div class="total-card">
-        <div class="total-value" :class="{ negative: totals.available < 0 }">
-          {{ totals.available }}
-        </div>
-        <div class="total-label">Свободных мест</div>
-      </div>
     </div>
 
     <AppTable
@@ -69,11 +77,6 @@ onMounted(async () => {
     >
       <template #quota="{ row }">
         {{ row.quota ?? '-' }}
-      </template>
-      <template #available="{ row }">
-        <span :class="{ negative: (row.quota || 0) - row.enrolled < 0 }">
-          {{ row.quota != null ? (row.quota - row.enrolled) : '-' }}
-        </span>
       </template>
     </AppTable>
   </div>
@@ -114,17 +117,8 @@ onMounted(async () => {
   margin-bottom: 4px;
 }
 
-.total-value.negative {
-  color: #dc2626;
-}
-
 .total-label {
   font-size: 14px;
   color: #6b7280;
-}
-
-.negative {
-  color: #dc2626;
-  font-weight: 600;
 }
 </style>
