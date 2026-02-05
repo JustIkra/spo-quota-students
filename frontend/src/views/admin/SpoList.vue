@@ -133,7 +133,7 @@ async function deleteSpo() {
       @close="showDeleteModal = false"
     >
       <p>Вы уверены, что хотите удалить учреждение "{{ deletingSpo?.name }}"?</p>
-      <p class="warning">Это действие также удалит всех связанных операторов, специальности и студентов.</p>
+      <p class="warning">Это действие также удалит всех связанных операторов, направления и студентов.</p>
 
       <template #footer>
         <AppButton variant="secondary" @click="showDeleteModal = false">

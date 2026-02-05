@@ -23,13 +23,13 @@ const columns = [
   { key: 'id', label: 'ID', width: '80px' },
   { key: 'full_name', label: 'ФИО' },
   { key: 'certificate_number', label: 'Номер аттестата', width: '160px' },
-  { key: 'specialty_name', label: 'Специальность' },
+  { key: 'specialty_name', label: 'Направление' },
   { key: 'actions', label: 'Действия', width: '120px' }
 ]
 
 const specialtyOptions = computed(() => {
   return [
-    { value: '', label: 'Все специальности' },
+    { value: '', label: 'Все направления' },
     ...specialties.value.map(s => ({
       value: s.id,
       label: `${s.code} - ${s.name}`
@@ -129,8 +129,8 @@ async function deleteStudent() {
       <AppSelect
         v-model="selectedSpecialty"
         :options="specialtyOptions.slice(1)"
-        placeholder="Все специальности"
-        label="Фильтр по специальности"
+        placeholder="Все направления"
+        label="Фильтр по направления"
       />
     </div>
 

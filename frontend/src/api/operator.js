@@ -1,19 +1,9 @@
 import api from './index'
 
 export const operatorApi = {
-  // Специальности
+  // Специальности/профессии (только чтение)
   async getSpecialties() {
     const response = await api.get('/specialties')
-    return response.data
-  },
-
-  async createSpecialty(data) {
-    const response = await api.post('/specialties', data)
-    return response.data
-  },
-
-  async deleteSpecialty(id) {
-    const response = await api.delete(`/specialties/${id}`)
     return response.data
   },
 

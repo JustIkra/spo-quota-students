@@ -14,8 +14,15 @@ class SpecialtyBase(BaseModel):
 
 
 class SpecialtyCreate(SpecialtyBase):
-    """Schema for creating specialty."""
+    """Schema for creating specialty (deprecated - use SpecialtyAssign)."""
     pass
+
+
+class SpecialtyAssign(BaseModel):
+    """Schema for assigning specialty template to SPO."""
+    template_id: int = Field(..., description="ID шаблона специальности/профессии")
+    spo_id: int = Field(..., description="ID учреждения")
+    quota: Optional[int] = Field(None, ge=0, description="Квота (если не указана, берётся из настроек)")
 
 
 class SpecialtyUpdate(BaseModel):
@@ -33,6 +40,7 @@ class SpecialtyResponse(SpecialtyBase):
     """Schema for specialty response."""
     id: int
     spo_id: int
+    template_id: Optional[int] = None
     quota: int
     created_at: datetime
 
@@ -44,3 +52,4 @@ class SpecialtyWithStats(SpecialtyResponse):
     """Schema for specialty with student count."""
     students_count: int = 0
     available_slots: int = 0
+    spo_name: Optional[str] = None

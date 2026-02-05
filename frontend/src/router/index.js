@@ -40,10 +40,20 @@ const routes = [
         meta: { role: 'admin' }
       },
       {
-        path: 'admin/quotas',
-        name: 'quota-settings',
-        component: () => import('../views/admin/QuotaSettings.vue'),
+        path: 'admin/specialty-templates',
+        name: 'specialty-template-list',
+        component: () => import('../views/admin/SpecialtyTemplateList.vue'),
         meta: { role: 'admin' }
+      },
+      {
+        path: 'admin/specialties',
+        name: 'specialty-assignment',
+        component: () => import('../views/admin/SpecialtyAssignment.vue'),
+        meta: { role: 'admin' }
+      },
+      {
+        path: 'admin/quotas',
+        redirect: '/admin/specialties'
       },
       {
         path: 'admin/stats',

@@ -4,7 +4,7 @@ User model for authentication and authorization.
 from datetime import datetime
 from enum import Enum as PyEnum
 
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Enum
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Enum, Index
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -26,6 +26,14 @@ class User(Base):
     role = Column(Enum(UserRole), nullable=False, default=UserRole.OPERATOR)
     spo_id = Column(Integer, ForeignKey("spo.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Unique constraint: only one operator per SPO (partial index for operators only)
+    # Note: PostgreSQL supports partial unique indexes, for SQLite we'll use application-level check
+    __table_args__ = (
+        Index('ix_users_spo_id_unique_operator', 'spo_id',
+              unique=True,
+              postgresql_where=(role == UserRole.OPERATOR)),
+    )
 
     # Relationships
     spo = relationship("SPO", back_populates="operators")

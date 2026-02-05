@@ -39,7 +39,7 @@ onMounted(async () => {
     <div v-else class="stats-grid">
       <RouterLink to="/operator/specialties" class="stat-card">
         <div class="stat-value">{{ specialtyCount }}</div>
-        <div class="stat-label">Специальностей</div>
+        <div class="stat-label">Направлений</div>
       </RouterLink>
 
       <RouterLink to="/operator/students" class="stat-card">
@@ -52,7 +52,7 @@ onMounted(async () => {
       <h2 class="section-title">Быстрые действия</h2>
       <div class="links-grid">
         <RouterLink to="/operator/specialties" class="link-card">
-          Управление специальностями
+          Управление направлениями
         </RouterLink>
         <RouterLink to="/operator/students" class="link-card">
           Список студентов

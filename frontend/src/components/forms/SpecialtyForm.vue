@@ -30,10 +30,10 @@ watch(() => props.show, (newVal) => {
 function validate() {
   errors.value = {}
   if (!form.value.code.trim()) {
-    errors.value.code = 'Введите код специальности'
+    errors.value.code = 'Введите код направления'
   }
   if (!form.value.name.trim()) {
-    errors.value.name = 'Введите название специальности'
+    errors.value.name = 'Введите название направления'
   }
   return Object.keys(errors.value).length === 0
 }
@@ -53,13 +53,13 @@ async function submit() {
 <template>
   <AppModal
     :show="show"
-    title="Новая специальность"
+    title="Новая направление"
     @close="$emit('close')"
   >
     <form class="form" @submit.prevent="submit">
       <AppInput
         v-model="form.code"
-        label="Код специальности"
+        label="Код направления"
         placeholder="Например: 09.02.07"
         :error="errors.code"
         required

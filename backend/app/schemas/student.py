@@ -3,8 +3,9 @@ Pydantic schemas for Student model.
 """
 from datetime import datetime
 from typing import Optional
+import re
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field, computed_field, field_validator
 
 
 class StudentBase(BaseModel):
@@ -12,7 +13,17 @@ class StudentBase(BaseModel):
     first_name: str = Field(..., min_length=1, max_length=100)
     last_name: str = Field(..., min_length=1, max_length=100)
     middle_name: Optional[str] = Field(None, max_length=100)
-    certificate_number: str = Field(..., min_length=1, max_length=50)
+    certificate_number: str = Field(..., min_length=1, max_length=50, description="Номер аттестата (только цифры)")
+
+    @field_validator('certificate_number')
+    @classmethod
+    def validate_certificate_number(cls, v: str) -> str:
+        """Validate that certificate_number contains only digits."""
+        if not v:
+            raise ValueError('Номер аттестата обязателен')
+        if not re.match(r'^\d+$', v):
+            raise ValueError('Номер аттестата должен содержать только цифры')
+        return v
 
 
 class StudentCreate(StudentBase):

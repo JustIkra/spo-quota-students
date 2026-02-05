@@ -15,13 +15,21 @@ from app.schemas.spo import (
     SPOResponse,
     SPOWithStats
 )
+from app.schemas.specialty_template import (
+    SpecialtyTemplateBase,
+    SpecialtyTemplateCreate,
+    SpecialtyTemplateUpdate,
+    SpecialtyTemplateResponse,
+    SpecialtyTemplateWithUsage
+)
 from app.schemas.specialty import (
     SpecialtyBase,
     SpecialtyCreate,
     SpecialtyUpdate,
     QuotaUpdate,
     SpecialtyResponse,
-    SpecialtyWithStats
+    SpecialtyWithStats,
+    SpecialtyAssign
 )
 from app.schemas.student import (
     StudentBase,
@@ -44,8 +52,10 @@ __all__ = [
     "UserBase", "UserCreate", "UserLogin", "UserResponse", "UserWithPassword",
     "TokenResponse", "CurrentUser",
     "SPOBase", "SPOCreate", "SPOUpdate", "SPOResponse", "SPOWithStats",
+    "SpecialtyTemplateBase", "SpecialtyTemplateCreate", "SpecialtyTemplateUpdate",
+    "SpecialtyTemplateResponse", "SpecialtyTemplateWithUsage",
     "SpecialtyBase", "SpecialtyCreate", "SpecialtyUpdate", "QuotaUpdate",
-    "SpecialtyResponse", "SpecialtyWithStats",
+    "SpecialtyResponse", "SpecialtyWithStats", "SpecialtyAssign",
     "StudentBase", "StudentCreate", "StudentResponse", "StudentWithSpecialty",
     "SettingsBase", "SettingsUpdate", "SettingsResponse",
     "SpecialtyStats", "SPOStats", "OverallStats"

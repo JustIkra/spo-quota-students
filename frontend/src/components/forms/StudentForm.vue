@@ -63,9 +63,11 @@ function validate() {
   }
   if (!form.value.certificate_number.trim()) {
     errors.value.certificate_number = 'Введите номер аттестата'
+  } else if (!/^\d+$/.test(form.value.certificate_number.trim())) {
+    errors.value.certificate_number = 'Номер аттестата должен содержать только цифры'
   }
   if (!form.value.specialty_id) {
-    errors.value.specialty_id = 'Выберите специальность'
+    errors.value.specialty_id = 'Выберите направление'
   }
   return Object.keys(errors.value).length === 0
 }
@@ -141,7 +143,7 @@ defineExpose({ setError })
       />
       <AppSelect
         v-model="form.specialty_id"
-        label="Специальность"
+        label="Направление"
         :options="specialtyOptions"
         :error="errors.specialty_id"
         required

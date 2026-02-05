@@ -10,8 +10,8 @@ const totalStats = ref({ total_quota: 0, total_students: 0 })
 const loading = ref(true)
 
 const columns = [
-  { key: 'code', label: 'Код специальности' },
-  { key: 'name', label: 'Специальность' },
+  { key: 'code', label: 'Код' },
+  { key: 'name', label: 'Направление' },
   { key: 'quota', label: 'Квота', width: '100px' },
   { key: 'enrolled', label: 'Записано', width: '100px' }
 ]

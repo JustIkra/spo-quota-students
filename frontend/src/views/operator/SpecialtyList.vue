@@ -1,26 +1,16 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { operatorApi } from '../../api/operator'
-import { useToastStore } from '../../stores/toast'
-import AppButton from '../../components/ui/AppButton.vue'
 import AppTable from '../../components/ui/AppTable.vue'
-import SpecialtyForm from '../../components/forms/SpecialtyForm.vue'
-import AppModal from '../../components/ui/AppModal.vue'
-
-const toast = useToastStore()
 
 const specialties = ref([])
 const loading = ref(true)
-const showForm = ref(false)
-const showDeleteModal = ref(false)
-const deletingSpecialty = ref(null)
 
 const columns = [
-  { key: 'id', label: 'ID', width: '80px' },
   { key: 'code', label: 'Код', width: '120px' },
   { key: 'name', label: 'Название' },
   { key: 'quota', label: 'Квота', width: '100px' },
-  { key: 'actions', label: 'Действия', width: '120px' }
+  { key: 'students_count', label: 'Записано', width: '100px' }
 ]
 
 onMounted(() => {
@@ -37,84 +27,25 @@ async function loadData() {
     loading.value = false
   }
 }
-
-async function handleSubmit(data) {
-  try {
-    await operatorApi.createSpecialty(data)
-    showForm.value = false
-    await loadData()
-  } catch (error) {
-    console.error('Ошибка создания:', error)
-    toast.error('Ошибка: ' + (error.response?.data?.detail || 'Неизвестная ошибка'))
-  }
-}
-
-function confirmDelete(specialty) {
-  deletingSpecialty.value = specialty
-  showDeleteModal.value = true
-}
-
-async function deleteSpecialty() {
-  if (!deletingSpecialty.value) return
-
-  try {
-    await operatorApi.deleteSpecialty(deletingSpecialty.value.id)
-    showDeleteModal.value = false
-    deletingSpecialty.value = null
-    await loadData()
-  } catch (error) {
-    console.error('Ошибка удаления:', error)
-    toast.error('Ошибка: ' + (error.response?.data?.detail || 'Неизвестная ошибка'))
-  }
-}
 </script>
 
 <template>
   <div class="specialty-list">
     <div class="page-header">
-      <h1 class="page-title">Специальности</h1>
-      <AppButton @click="showForm = true">Добавить специальность</AppButton>
+      <h1 class="page-title">Направления</h1>
     </div>
+
+    <p class="info-text">
+      Управление направлениями осуществляется администратором.
+      Здесь вы можете просмотреть прикреплённые к вашему учреждению направления.
+    </p>
 
     <AppTable
       :columns="columns"
       :data="specialties"
       :loading="loading"
-      empty-text="Нет добавленных специальностей"
-    >
-      <template #quota="{ row }">
-        {{ row.quota ?? 'По умолч.' }}
-      </template>
-      <template #actions="{ row }">
-        <AppButton variant="danger" @click="confirmDelete(row)">
-          Удалить
-        </AppButton>
-      </template>
-    </AppTable>
-
-    <SpecialtyForm
-      :show="showForm"
-      @close="showForm = false"
-      @submit="handleSubmit"
+      empty-text="Нет прикреплённых направлений"
     />
-
-    <AppModal
-      :show="showDeleteModal"
-      title="Подтверждение удаления"
-      @close="showDeleteModal = false"
-    >
-      <p>Вы уверены, что хотите удалить специальность "{{ deletingSpecialty?.name }}"?</p>
-      <p class="warning">Все студенты этой специальности также будут удалены.</p>
-
-      <template #footer>
-        <AppButton variant="secondary" @click="showDeleteModal = false">
-          Отмена
-        </AppButton>
-        <AppButton variant="danger" @click="deleteSpecialty">
-          Удалить
-        </AppButton>
-      </template>
-    </AppModal>
   </div>
 </template>
 
@@ -123,7 +54,7 @@ async function deleteSpecialty() {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 
 .page-title {
@@ -133,9 +64,17 @@ async function deleteSpecialty() {
   margin: 0;
 }
 
-.warning {
-  color: #dc2626;
+.info-text {
+  color: #6b7280;
   font-size: 14px;
-  margin-top: 8px;
+  margin-bottom: 24px;
+  padding: 12px 16px;
+  background: #f3f4f6;
+  border-radius: 8px;
+}
+
+.slots-full {
+  color: #dc2626;
+  font-weight: 600;
 }
 </style>

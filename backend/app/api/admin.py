@@ -1,5 +1,5 @@
 """
-Admin API endpoints - SPO, operators, settings management.
+Admin API endpoints - SPO, operators, specialty templates, settings management.
 """
 from typing import List
 
@@ -8,11 +8,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from app.api.deps import get_db, get_current_admin
-from app.models import User, UserRole, SPO, Specialty, Student
+from app.models import User, UserRole, SPO, SpecialtyTemplate, Specialty, Student
 from app.schemas import (
     SPOCreate, SPOUpdate, SPOResponse, SPOWithStats,
     UserCreate, UserResponse, UserWithPassword,
-    QuotaUpdate, SpecialtyResponse,
+    SpecialtyTemplateCreate, SpecialtyTemplateUpdate, SpecialtyTemplateResponse, SpecialtyTemplateWithUsage,
+    SpecialtyAssign, QuotaUpdate, SpecialtyResponse, SpecialtyWithStats,
     SettingsResponse, SettingsUpdate
 )
 from app.services import create_operator, reset_password, get_base_quota, set_base_quota
@@ -219,13 +220,25 @@ def create_operator_endpoint(
 ):
     """
     Create new operator for SPO. Returns generated login and password.
+    Each SPO can have only one operator.
     """
     # Check if SPO exists
     spo = db.query(SPO).filter(SPO.id == user_data.spo_id).first()
     if not spo:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="SPO not found"
+            detail="Учреждение не найдено"
+        )
+
+    # Check if SPO already has an operator
+    existing_operator = db.query(User).filter(
+        User.spo_id == user_data.spo_id,
+        User.role == UserRole.OPERATOR
+    ).first()
+    if existing_operator:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="У этого учреждения уже есть оператор"
         )
 
     # Create operator with generated credentials
@@ -347,3 +360,257 @@ def update_settings(
     """
     base_quota = set_base_quota(db, settings_data.base_quota)
     return SettingsResponse(base_quota=base_quota)
+
+
+# ==================== Specialty Templates (Catalog) Management ====================
+
+@router.get("/specialty-templates", response_model=List[SpecialtyTemplateWithUsage])
+def list_specialty_templates(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin)
+):
+    """
+    Get list of all specialty templates with usage count.
+    """
+    # Subquery: count SPOs using each template
+    usage_subq = (
+        db.query(
+            Specialty.template_id,
+            func.count(func.distinct(Specialty.spo_id)).label("spo_count")
+        )
+        .filter(Specialty.template_id.isnot(None))
+        .group_by(Specialty.template_id)
+        .subquery()
+    )
+
+    result = (
+        db.query(
+            SpecialtyTemplate.id,
+            SpecialtyTemplate.code,
+            SpecialtyTemplate.name,
+            SpecialtyTemplate.created_at,
+            func.coalesce(usage_subq.c.spo_count, 0).label("spo_count")
+        )
+        .outerjoin(usage_subq, SpecialtyTemplate.id == usage_subq.c.template_id)
+        .order_by(SpecialtyTemplate.code)
+        .all()
+    )
+
+    return [
+        SpecialtyTemplateWithUsage(
+            id=row.id,
+            code=row.code,
+            name=row.name,
+            created_at=row.created_at,
+            spo_count=row.spo_count
+        )
+        for row in result
+    ]
+
+
+@router.post("/specialty-templates", response_model=SpecialtyTemplateResponse, status_code=status.HTTP_201_CREATED)
+def create_specialty_template(
+    template_data: SpecialtyTemplateCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin)
+):
+    """
+    Create new specialty template in the global catalog.
+    """
+    # Check for duplicate code
+    existing = db.query(SpecialtyTemplate).filter(
+        SpecialtyTemplate.code == template_data.code
+    ).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Специальность/профессия с кодом '{template_data.code}' уже существует"
+        )
+
+    template = SpecialtyTemplate(
+        code=template_data.code,
+        name=template_data.name
+    )
+    db.add(template)
+    db.commit()
+    db.refresh(template)
+    return template
+
+
+@router.put("/specialty-templates/{template_id}", response_model=SpecialtyTemplateResponse)
+def update_specialty_template(
+    template_id: int,
+    template_data: SpecialtyTemplateUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin)
+):
+    """
+    Update specialty template.
+    """
+    template = db.query(SpecialtyTemplate).filter(SpecialtyTemplate.id == template_id).first()
+    if not template:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Специальность/профессия не найдена в справочнике"
+        )
+
+    if template_data.code is not None:
+        # Check for duplicate code
+        existing = db.query(SpecialtyTemplate).filter(
+            SpecialtyTemplate.code == template_data.code,
+            SpecialtyTemplate.id != template_id
+        ).first()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Специальность/профессия с кодом '{template_data.code}' уже существует"
+            )
+        template.code = template_data.code
+
+    if template_data.name is not None:
+        template.name = template_data.name
+
+    # Update all assigned specialties to sync name/code
+    if template_data.code is not None or template_data.name is not None:
+        db.query(Specialty).filter(Specialty.template_id == template_id).update({
+            Specialty.code: template.code,
+            Specialty.name: template.name
+        })
+
+    db.commit()
+    db.refresh(template)
+    return template
+
+
+@router.delete("/specialty-templates/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_specialty_template(
+    template_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin)
+):
+    """
+    Delete specialty template. Also removes all assignments to SPOs (and their students).
+    """
+    template = db.query(SpecialtyTemplate).filter(SpecialtyTemplate.id == template_id).first()
+    if not template:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Специальность/профессия не найдена в справочнике"
+        )
+
+    db.delete(template)
+    db.commit()
+
+
+# ==================== Specialties Assignment Management ====================
+
+@router.get("/specialties", response_model=List[SpecialtyWithStats])
+def list_all_specialties(
+    spo_id: int = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin)
+):
+    """
+    Get list of all assigned specialties with stats.
+    Optionally filter by spo_id.
+    """
+    query = db.query(Specialty)
+    if spo_id is not None:
+        query = query.filter(Specialty.spo_id == spo_id)
+
+    specialties = query.all()
+
+    result = []
+    for specialty in specialties:
+        students_count = db.query(func.count(Student.id)).filter(
+            Student.specialty_id == specialty.id
+        ).scalar()
+
+        spo_name = specialty.spo.name if specialty.spo else None
+
+        result.append(SpecialtyWithStats(
+            id=specialty.id,
+            spo_id=specialty.spo_id,
+            template_id=specialty.template_id,
+            code=specialty.code,
+            name=specialty.name,
+            quota=specialty.quota,
+            created_at=specialty.created_at,
+            students_count=students_count,
+            available_slots=max(0, specialty.quota - students_count),
+            spo_name=spo_name
+        ))
+
+    return result
+
+
+@router.post("/specialties", response_model=SpecialtyResponse, status_code=status.HTTP_201_CREATED)
+def assign_specialty_to_spo(
+    data: SpecialtyAssign,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin)
+):
+    """
+    Assign specialty template to SPO with quota.
+    """
+    # Check template exists
+    template = db.query(SpecialtyTemplate).filter(SpecialtyTemplate.id == data.template_id).first()
+    if not template:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Специальность/профессия не найдена в справочнике"
+        )
+
+    # Check SPO exists
+    spo = db.query(SPO).filter(SPO.id == data.spo_id).first()
+    if not spo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Учреждение не найдено"
+        )
+
+    # Check if already assigned
+    existing = db.query(Specialty).filter(
+        Specialty.spo_id == data.spo_id,
+        Specialty.template_id == data.template_id
+    ).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Эта специальность/профессия уже прикреплена к данному учреждению"
+        )
+
+    # Get quota from settings if not provided
+    quota = data.quota if data.quota is not None else get_base_quota(db)
+
+    specialty = Specialty(
+        spo_id=data.spo_id,
+        template_id=data.template_id,
+        code=template.code,
+        name=template.name,
+        quota=quota
+    )
+    db.add(specialty)
+    db.commit()
+    db.refresh(specialty)
+    return specialty
+
+
+@router.delete("/specialties/{specialty_id}", status_code=status.HTTP_204_NO_CONTENT)
+def unassign_specialty_from_spo(
+    specialty_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin)
+):
+    """
+    Remove specialty assignment from SPO. Also deletes all students in this specialty.
+    """
+    specialty = db.query(Specialty).filter(Specialty.id == specialty_id).first()
+    if not specialty:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Специальность/профессия не найдена"
+        )
+
+    db.delete(specialty)
+    db.commit()

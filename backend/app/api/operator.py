@@ -1,5 +1,5 @@
 """
-Operator API endpoints - specialties and students management.
+Operator API endpoints - specialties viewing and students management.
 """
 from typing import List, Optional
 
@@ -10,16 +10,15 @@ from sqlalchemy import func
 from app.api.deps import get_db, get_current_operator
 from app.models import User, Specialty, Student
 from app.schemas import (
-    SpecialtyCreate, SpecialtyResponse, SpecialtyWithStats,
+    SpecialtyWithStats,
     StudentCreate, StudentResponse, StudentWithSpecialty
 )
-from app.services import get_base_quota
 
 
 router = APIRouter(prefix="/api", tags=["Operator"])
 
 
-# ==================== Specialties Management ====================
+# ==================== Specialties Viewing (Read-Only) ====================
 
 @router.get("/specialties", response_model=List[SpecialtyWithStats])
 def list_specialties(
@@ -27,7 +26,8 @@ def list_specialties(
     current_user: User = Depends(get_current_operator)
 ):
     """
-    Get list of specialties for operator's SPO.
+    Get list of specialties assigned to operator's SPO (read-only).
+    Specialty management is done by admin.
     """
     specialties = db.query(Specialty).filter(
         Specialty.spo_id == current_user.spo_id
@@ -42,6 +42,7 @@ def list_specialties(
         result.append(SpecialtyWithStats(
             id=specialty.id,
             spo_id=specialty.spo_id,
+            template_id=specialty.template_id,
             code=specialty.code,
             name=specialty.name,
             quota=specialty.quota,
@@ -51,54 +52,6 @@ def list_specialties(
         ))
 
     return result
-
-
-@router.post("/specialties", response_model=SpecialtyResponse, status_code=status.HTTP_201_CREATED)
-def create_specialty(
-    specialty_data: SpecialtyCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_operator)
-):
-    """
-    Create new specialty for operator's SPO.
-    Quota is taken from settings.base_quota.
-    """
-    base_quota = get_base_quota(db)
-
-    specialty = Specialty(
-        spo_id=current_user.spo_id,
-        code=specialty_data.code,
-        name=specialty_data.name,
-        quota=base_quota
-    )
-    db.add(specialty)
-    db.commit()
-    db.refresh(specialty)
-    return specialty
-
-
-@router.delete("/specialties/{specialty_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_specialty(
-    specialty_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_operator)
-):
-    """
-    Delete specialty by ID (only from operator's SPO).
-    """
-    specialty = db.query(Specialty).filter(
-        Specialty.id == specialty_id,
-        Specialty.spo_id == current_user.spo_id
-    ).first()
-
-    if not specialty:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Specialty not found or does not belong to your SPO"
-        )
-
-    db.delete(specialty)
-    db.commit()
 
 
 # ==================== Students Management ====================

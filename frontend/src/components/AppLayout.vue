@@ -12,13 +12,14 @@ const navItems = computed(() => {
       { to: '/admin', label: 'Главная' },
       { to: '/admin/spo', label: 'Учреждения' },
       { to: '/admin/operators', label: 'Операторы' },
-      { to: '/admin/quotas', label: 'Квоты' },
+      { to: '/admin/specialty-templates', label: 'Справочник' },
+      { to: '/admin/specialties', label: 'Направления' },
       { to: '/admin/stats', label: 'Статистика' }
     ]
   }
   return [
     { to: '/operator', label: 'Главная' },
-    { to: '/operator/specialties', label: 'Специальности' },
+    { to: '/operator/specialties', label: 'Направления' },
     { to: '/operator/students', label: 'Студенты' },
     { to: '/operator/stats', label: 'Статистика' }
   ]
@@ -81,14 +82,15 @@ function logout() {
   height: 60px;
   display: flex;
   align-items: center;
-  gap: 32px;
+  gap: 16px;
 }
 
 .logo {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   color: #111827;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .nav {
@@ -98,11 +100,13 @@ function logout() {
 }
 
 .nav-link {
-  padding: 8px 16px;
+  padding: 8px 10px;
   color: #6b7280;
   text-decoration: none;
   border-radius: 6px;
   transition: background-color 0.2s, color 0.2s;
+  white-space: nowrap;
+  font-size: 13px;
 }
 
 .nav-link:hover {
@@ -120,6 +124,8 @@ function logout() {
   display: flex;
   align-items: center;
   gap: 8px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .user-name {
