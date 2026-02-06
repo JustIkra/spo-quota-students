@@ -66,6 +66,7 @@ async function submit() {
   <AppModal
     :show="show"
     title="Новый оператор"
+    width="640px"
     @close="$emit('close')"
   >
     <div v-if="noAvailableSpo" class="no-spo-warning">

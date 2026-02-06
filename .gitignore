@@ -36,3 +36,4 @@ postgres_data/
 .claude
 CLAUDE.md
 docs/
+.memory-base/
