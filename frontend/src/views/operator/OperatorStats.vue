@@ -121,4 +121,35 @@ onMounted(async () => {
   font-size: 14px;
   color: #6b7280;
 }
+
+/* Mobile: 480px - 767px */
+@media (max-width: 767px) {
+  .page-title {
+    font-size: 22px;
+    word-break: break-word;
+  }
+
+  .total-value {
+    font-size: 24px;
+  }
+}
+
+/* Small Mobile: < 480px */
+@media (max-width: 479px) {
+  .page-title {
+    font-size: 20px;
+  }
+
+  .total-value {
+    font-size: 20px;
+  }
+
+  .total-card {
+    padding: 14px;
+  }
+
+  .totals {
+    gap: 12px;
+  }
+}
 </style>

@@ -131,4 +131,61 @@ function onOverlayClick(e) {
 .modal-leave-to .modal {
   transform: scale(0.95);
 }
+
+/* Mobile: 480px - 767px */
+@media (max-width: 767px) {
+  .modal-overlay {
+    padding: 12px;
+  }
+
+  .modal {
+    max-height: 95vh;
+  }
+
+  .modal-footer {
+    flex-wrap: wrap;
+  }
+
+  .modal-footer > * {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+/* Small Mobile: < 480px */
+@media (max-width: 479px) {
+  .modal-overlay {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .modal {
+    max-height: 100vh;
+    border-radius: 12px 12px 0 0;
+    max-width: 100% !important;
+  }
+
+  .modal-header {
+    padding: 14px 16px;
+  }
+
+  .modal-title {
+    font-size: 16px;
+  }
+
+  .modal-body {
+    padding: 14px 16px;
+  }
+
+  .modal-footer {
+    padding: 12px 16px;
+    gap: 8px;
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+  }
+
+  .modal-footer > * {
+    flex: 1;
+    min-width: 0;
+  }
+}
 </style>

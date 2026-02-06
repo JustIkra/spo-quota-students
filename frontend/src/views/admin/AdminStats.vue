@@ -685,4 +685,113 @@ function getAvailableSlots(spo) {
   color: #9ca3af;
   font-size: 14px;
 }
+
+/* Tablet: 768px - 1023px */
+@media (max-width: 1023px) {
+  .stat-value {
+    font-size: 28px;
+  }
+}
+
+/* Mobile: 480px - 767px */
+@media (max-width: 767px) {
+  .page-title {
+    font-size: 22px;
+    word-break: break-word;
+  }
+
+  .summary-stats {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .summary-divider {
+    font-size: 14px;
+  }
+
+  .stat-value {
+    font-size: 28px;
+  }
+
+  .controls {
+    flex-direction: column;
+  }
+
+  .search-box {
+    min-width: 0;
+  }
+
+  .sort-box {
+    min-width: 0;
+  }
+
+  .spo-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .spo-name {
+    max-width: 100%;
+  }
+
+  .specialty-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .specialty-stats {
+    padding-left: 0;
+    width: 100%;
+  }
+
+  .spo-progress {
+    padding: 10px 16px;
+  }
+
+  .specialties-list {
+    padding: 8px 16px 12px;
+  }
+}
+
+/* Small Mobile: < 480px */
+@media (max-width: 479px) {
+  .page-title {
+    font-size: 20px;
+    margin-bottom: 16px;
+  }
+
+  .summary-section {
+    padding: 16px;
+  }
+
+  .quick-stat-value {
+    font-size: 22px;
+  }
+
+  .quick-stat-card {
+    padding: 12px;
+  }
+
+  .spo-header {
+    padding: 12px 14px;
+  }
+
+  .spo-progress {
+    padding: 8px 14px;
+  }
+
+  .specialties-list {
+    padding: 6px 14px 10px;
+  }
+
+  .specialty-code {
+    min-width: auto;
+  }
+
+  .stat-available {
+    min-width: auto;
+  }
+}
 </style>

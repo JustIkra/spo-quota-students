@@ -95,4 +95,20 @@ defineEmits(['click'])
     transform: rotate(360deg);
   }
 }
+
+/* Mobile */
+@media (max-width: 767px) {
+  .btn {
+    padding: 7px 12px;
+    font-size: 13px;
+  }
+}
+
+/* Small Mobile */
+@media (max-width: 479px) {
+  .btn {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+}
 </style>

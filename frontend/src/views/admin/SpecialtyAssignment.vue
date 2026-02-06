@@ -435,4 +435,50 @@ async function deleteSpecialty() {
   font-size: 14px;
   margin-bottom: 16px;
 }
+
+/* Mobile: 480px - 767px */
+@media (max-width: 767px) {
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .page-title {
+    font-size: 22px;
+    word-break: break-word;
+  }
+
+  .header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .header-actions > * {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .filters {
+    max-width: none;
+  }
+
+  .actions {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .actions > * {
+    flex: 1;
+  }
+}
+
+/* Small Mobile: < 480px */
+@media (max-width: 479px) {
+  .page-title {
+    font-size: 20px;
+  }
+}
 </style>

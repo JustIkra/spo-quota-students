@@ -139,4 +139,18 @@ function getIcon(type) {
     transform: translateX(100%);
   }
 }
+
+/* Small Mobile: < 480px */
+@media (max-width: 479px) {
+  .toast-container {
+    left: 12px;
+    right: 12px;
+    max-width: none;
+  }
+
+  .toast {
+    padding: 12px 14px;
+    font-size: 13px;
+  }
+}
 </style>

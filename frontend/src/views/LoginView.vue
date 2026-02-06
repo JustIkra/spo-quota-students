@@ -133,4 +133,23 @@ async function submit() {
   font-size: 16px;
   margin-top: 8px;
 }
+
+/* Small Mobile: < 480px */
+@media (max-width: 479px) {
+  .login-card {
+    padding: 24px;
+  }
+
+  .title {
+    font-size: 20px;
+  }
+
+  .subtitle {
+    margin-bottom: 24px;
+  }
+
+  .form {
+    gap: 16px;
+  }
+}
 </style>

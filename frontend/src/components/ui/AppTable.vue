@@ -74,7 +74,8 @@ const visiblePages = computed(() => {
 
 <template>
   <div class="table-container">
-    <table class="table">
+    <!-- Desktop table -->
+    <table class="table desktop-table">
       <thead>
         <tr>
           <th
@@ -106,6 +107,33 @@ const visiblePages = computed(() => {
         </tr>
       </tbody>
     </table>
+
+    <!-- Mobile card layout -->
+    <div class="mobile-cards">
+      <div v-if="loading" class="loading-cell">Загрузка...</div>
+      <div v-else-if="data.length === 0" class="empty-cell">{{ emptyText }}</div>
+      <div v-else v-for="(row, index) in paginatedData" :key="row.id || index" class="mobile-card">
+        <div
+          v-for="col in columns"
+          :key="col.key"
+          class="mobile-card-row"
+          :class="{ 'mobile-card-actions': col.key === 'actions' }"
+        >
+          <span v-if="col.key !== 'actions'" class="mobile-card-label">{{ col.label }}</span>
+          <span v-if="col.key !== 'actions'" class="mobile-card-value">
+            <slot :name="col.key" :row="row" :value="row[col.key]">
+              {{ row[col.key] }}
+            </slot>
+          </span>
+          <div v-else class="mobile-card-actions-content">
+            <slot :name="col.key" :row="row" :value="row[col.key]">
+              {{ row[col.key] }}
+            </slot>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div v-if="showPagination" class="pagination">
       <button
         class="page-btn"
@@ -139,7 +167,6 @@ const visiblePages = computed(() => {
 
 <style scoped>
 .table-container {
-  overflow-x: auto;
   background: white;
   border-radius: 8px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
@@ -176,6 +203,11 @@ const visiblePages = computed(() => {
   text-align: center;
   color: #6b7280;
   padding: 32px 16px;
+}
+
+/* Mobile cards hidden by default */
+.mobile-cards {
+  display: none;
 }
 
 .pagination {
@@ -226,5 +258,107 @@ const visiblePages = computed(() => {
   margin-left: 12px;
   font-size: 13px;
   color: #6b7280;
+}
+
+/* Mobile: switch to card layout */
+@media (max-width: 767px) {
+  .desktop-table {
+    display: none;
+  }
+
+  .mobile-cards {
+    display: block;
+  }
+
+  .mobile-card {
+    padding: 14px 16px;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .mobile-card:last-child {
+    border-bottom: none;
+  }
+
+  .mobile-card-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 4px 0;
+  }
+
+  .mobile-card-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    flex-shrink: 0;
+    margin-right: 12px;
+    padding-top: 1px;
+  }
+
+  .mobile-card-value {
+    font-size: 14px;
+    color: #111827;
+    text-align: right;
+    word-break: break-word;
+  }
+
+  .mobile-card-actions {
+    justify-content: flex-end;
+    padding-top: 10px;
+    margin-top: 6px;
+    border-top: 1px solid #f3f4f6;
+  }
+
+  .mobile-card-actions-content {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .pagination {
+    padding: 10px 12px;
+    flex-wrap: wrap;
+  }
+
+  .page-btn {
+    min-width: 32px;
+    height: 32px;
+    font-size: 13px;
+  }
+
+  .page-ellipsis {
+    min-width: 28px;
+  }
+}
+
+/* Small Mobile: < 480px */
+@media (max-width: 479px) {
+  .mobile-card {
+    padding: 12px;
+  }
+
+  .mobile-card-label {
+    font-size: 11px;
+  }
+
+  .mobile-card-value {
+    font-size: 13px;
+  }
+
+  .page-btn {
+    min-width: 28px;
+    height: 28px;
+    font-size: 12px;
+    padding: 0 4px;
+  }
+
+  .page-info {
+    width: 100%;
+    text-align: center;
+    margin-left: 0;
+    margin-top: 8px;
+  }
 }
 </style>

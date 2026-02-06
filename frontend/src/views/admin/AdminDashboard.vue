@@ -150,4 +150,45 @@ onMounted(async () => {
   background-color: #f9fafb;
   text-decoration: none;
 }
+
+/* Mobile: 480px - 767px */
+@media (max-width: 767px) {
+  .page-title {
+    font-size: 22px;
+    margin-bottom: 24px;
+    word-break: break-word;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .links-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Small Mobile: < 480px */
+@media (max-width: 479px) {
+  .page-title {
+    font-size: 20px;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .stat-value {
+    font-size: 28px;
+  }
+
+  .stat-card {
+    padding: 16px;
+  }
+
+  .links-grid {
+    grid-template-columns: 1fr;
+  }
+}
 </style>
