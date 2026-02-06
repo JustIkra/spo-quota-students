@@ -103,6 +103,7 @@ async function deleteSpo() {
       :columns="columns"
       :data="spoList"
       :loading="loading"
+      :page-size="20"
       empty-text="Нет зарегистрированных учреждений"
     >
       <template #created_at="{ value }">

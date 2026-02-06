@@ -31,6 +31,22 @@ class StudentCreate(StudentBase):
     specialty_id: int = Field(..., description="Specialty ID")
 
 
+class StudentUpdate(BaseModel):
+    """Schema for updating student."""
+    first_name: Optional[str] = Field(None, min_length=1, max_length=100)
+    last_name: Optional[str] = Field(None, min_length=1, max_length=100)
+    middle_name: Optional[str] = Field(None, max_length=100)
+    certificate_number: Optional[str] = Field(None, min_length=1, max_length=50)
+    specialty_id: Optional[int] = None
+
+    @field_validator('certificate_number')
+    @classmethod
+    def validate_certificate_number(cls, v):
+        if v is not None and not re.match(r'^\d+$', v):
+            raise ValueError('Номер аттестата должен содержать только цифры')
+        return v
+
+
 class StudentResponse(StudentBase):
     """Schema for student response."""
     id: int

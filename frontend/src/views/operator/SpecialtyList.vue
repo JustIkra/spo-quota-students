@@ -44,6 +44,7 @@ async function loadData() {
       :columns="columns"
       :data="specialties"
       :loading="loading"
+      :page-size="20"
       empty-text="Нет прикреплённых направлений"
     />
   </div>

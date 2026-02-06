@@ -1,21 +1,36 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { statsApi } from '../../api/stats'
+import AppSelect from '../../components/ui/AppSelect.vue'
 
 const stats = ref(null)
 const loading = ref(true)
 const searchQuery = ref('')
 const sortBy = ref('name') // 'name', 'fill', 'students'
 
+const sortOptions = [
+  { value: 'name', label: 'По названию' },
+  { value: 'fill', label: 'По заполненности' },
+  { value: 'students', label: 'По числу студентов' }
+]
+
 const totals = computed(() => {
-  if (!stats.value) return { quota: 0, enrolled: 0, available: 0, overQuota: 0 }
-  const quota = stats.value.total_quota || 0
-  const enrolled = stats.value.total_students || 0
+  if (!spoCards.value.length) return { quota: 0, enrolled: 0, available: 0, overQuota: 0, spo: 0, specialties: 0 }
+  let quota = 0
+  let enrolled = 0
+  let specialtiesCount = 0
+  for (const spo of spoCards.value) {
+    quota += spo.total_quota || 0
+    enrolled += spo.total_students || 0
+    specialtiesCount += spo.specialties?.length || 0
+  }
   return {
     quota,
     enrolled,
     available: Math.max(0, quota - enrolled),
-    overQuota: Math.max(0, enrolled - quota)
+    overQuota: Math.max(0, enrolled - quota),
+    spo: spoCards.value.length,
+    specialties: specialtiesCount
   }
 })
 
@@ -95,6 +110,7 @@ function getAvailableSlots(spo) {
         <div class="summary-progress">
           <div class="progress-bar large">
             <div
+              v-if="fillPercent > 0"
               class="progress-fill"
               :style="{
                 width: Math.min(100, fillPercent) + '%',
@@ -120,11 +136,11 @@ function getAvailableSlots(spo) {
       <!-- Quick Stats Cards -->
       <div class="quick-stats">
         <div class="quick-stat-card">
-          <div class="quick-stat-value">{{ stats?.total_spo || 0 }}</div>
+          <div class="quick-stat-value">{{ totals.spo }}</div>
           <div class="quick-stat-label">учреждений</div>
         </div>
         <div class="quick-stat-card">
-          <div class="quick-stat-value">{{ stats?.total_specialties || 0 }}</div>
+          <div class="quick-stat-value">{{ totals.specialties }}</div>
           <div class="quick-stat-label">направлений</div>
         </div>
         <div class="quick-stat-card available">
@@ -140,6 +156,7 @@ function getAvailableSlots(spo) {
       <!-- Filters and Sort -->
       <div class="controls">
         <div class="search-box">
+          <label class="search-label">Поиск</label>
           <input
             v-model="searchQuery"
             type="text"
@@ -148,12 +165,11 @@ function getAvailableSlots(spo) {
           />
         </div>
         <div class="sort-box">
-          <label class="sort-label">Сортировка:</label>
-          <select v-model="sortBy" class="sort-select">
-            <option value="name">По названию</option>
-            <option value="fill">По заполненности</option>
-            <option value="students">По числу студентов</option>
-          </select>
+          <AppSelect
+            v-model="sortBy"
+            :options="sortOptions"
+            label="Сортировка"
+          />
         </div>
       </div>
 
@@ -194,6 +210,7 @@ function getAvailableSlots(spo) {
           <div class="spo-progress">
             <div class="progress-bar">
               <div
+                v-if="getProgressPercent(spo.total_students, spo.total_quota) > 0"
                 class="progress-fill"
                 :style="{
                   width: getProgressPercent(spo.total_students, spo.total_quota) + '%',
@@ -232,6 +249,7 @@ function getAvailableSlots(spo) {
                 </span>
                 <div class="mini-progress">
                   <div
+                    v-if="getProgressPercent(spec.students_count, spec.quota) > 0"
                     class="mini-progress-fill"
                     :style="{
                       width: getProgressPercent(spec.students_count, spec.quota) + '%',
@@ -408,11 +426,21 @@ function getAvailableSlots(spo) {
   gap: 16px;
   margin-bottom: 24px;
   flex-wrap: wrap;
+  align-items: flex-end;
 }
 
 .search-box {
   flex: 1;
   min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.search-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
 }
 
 .search-input {
@@ -421,33 +449,24 @@ function getAvailableSlots(spo) {
   border: 1px solid #d1d5db;
   border-radius: 8px;
   font-size: 14px;
+  line-height: 1.5;
   outline: none;
-  transition: border-color 0.2s;
+  transition: all 0.2s ease;
+}
+
+.search-input:hover {
+  border-color: #9ca3af;
+  background-color: #fafafa;
 }
 
 .search-input:focus {
   border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  background-color: white;
 }
 
 .sort-box {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.sort-label {
-  font-size: 14px;
-  color: #6b7280;
-  white-space: nowrap;
-}
-
-.sort-select {
-  padding: 10px 14px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  font-size: 14px;
-  outline: none;
-  cursor: pointer;
+  min-width: 180px;
 }
 
 /* SPO List Header */
@@ -506,6 +525,8 @@ function getAvailableSlots(spo) {
   font-weight: 600;
   color: #111827;
   margin: 0;
+  flex: 1;
+  max-width: 60%;
 }
 
 .spo-summary {
@@ -513,6 +534,7 @@ function getAvailableSlots(spo) {
   align-items: center;
   gap: 4px;
   font-size: 14px;
+  flex-shrink: 0;
 }
 
 .spo-summary-label {

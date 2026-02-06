@@ -34,6 +34,7 @@ from app.schemas.specialty import (
 from app.schemas.student import (
     StudentBase,
     StudentCreate,
+    StudentUpdate,
     StudentResponse,
     StudentWithSpecialty
 )
@@ -56,7 +57,7 @@ __all__ = [
     "SpecialtyTemplateResponse", "SpecialtyTemplateWithUsage",
     "SpecialtyBase", "SpecialtyCreate", "SpecialtyUpdate", "QuotaUpdate",
     "SpecialtyResponse", "SpecialtyWithStats", "SpecialtyAssign",
-    "StudentBase", "StudentCreate", "StudentResponse", "StudentWithSpecialty",
+    "StudentBase", "StudentCreate", "StudentUpdate", "StudentResponse", "StudentWithSpecialty",
     "SettingsBase", "SettingsUpdate", "SettingsResponse",
     "SpecialtyStats", "SPOStats", "OverallStats"
 ]

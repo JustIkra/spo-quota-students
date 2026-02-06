@@ -15,6 +15,7 @@ const specialties = ref([])
 const selectedSpecialty = ref('')
 const loading = ref(true)
 const showForm = ref(false)
+const editingStudent = ref(null)
 const showDeleteModal = ref(false)
 const deletingStudent = ref(null)
 const studentFormRef = ref(null)
@@ -24,7 +25,7 @@ const columns = [
   { key: 'full_name', label: 'ФИО' },
   { key: 'certificate_number', label: 'Номер аттестата', width: '160px' },
   { key: 'specialty_name', label: 'Направление' },
-  { key: 'actions', label: 'Действия', width: '120px' }
+  { key: 'actions', label: 'Действия', width: '200px' }
 ]
 
 const specialtyOptions = computed(() => {
@@ -82,19 +83,37 @@ async function loadData() {
   }
 }
 
+function openCreate() {
+  editingStudent.value = null
+  showForm.value = true
+}
+
+function openEdit(student) {
+  editingStudent.value = student
+  showForm.value = true
+}
+
+function closeForm() {
+  showForm.value = false
+  editingStudent.value = null
+}
+
 async function handleSubmit(data) {
   try {
-    await operatorApi.createStudent(data)
-    showForm.value = false
+    if (editingStudent.value) {
+      await operatorApi.updateStudent(editingStudent.value.id, data)
+    } else {
+      await operatorApi.createStudent(data)
+    }
+    closeForm()
     await loadData()
   } catch (error) {
-    console.error('Ошибка создания:', error)
-    // Передаем ошибку в форму для отображения
+    console.error(editingStudent.value ? 'Ошибка обновления:' : 'Ошибка создания:', error)
     if (studentFormRef.value) {
-      const message = error.response?.data?.detail || 'Ошибка при добавлении студента'
+      const message = error.response?.data?.detail || (editingStudent.value ? 'Ошибка при обновлении студента' : 'Ошибка при добавлении студента')
       studentFormRef.value.setError(message)
     }
-    throw error // Прокидываем дальше, чтобы форма не закрылась
+    throw error
   }
 }
 
@@ -122,7 +141,7 @@ async function deleteStudent() {
   <div class="student-list">
     <div class="page-header">
       <h1 class="page-title">Студенты</h1>
-      <AppButton @click="showForm = true">Добавить студента</AppButton>
+      <AppButton @click="openCreate">Добавить студента</AppButton>
     </div>
 
     <div class="filters">
@@ -138,12 +157,18 @@ async function deleteStudent() {
       :columns="columns"
       :data="filteredStudents"
       :loading="loading"
+      :page-size="20"
       empty-text="Нет добавленных студентов"
     >
       <template #actions="{ row }">
-        <AppButton variant="danger" @click="confirmDelete(row)">
-          Удалить
-        </AppButton>
+        <div class="action-buttons">
+          <AppButton variant="secondary" @click="openEdit(row)">
+            Изменить
+          </AppButton>
+          <AppButton variant="danger" @click="confirmDelete(row)">
+            Удалить
+          </AppButton>
+        </div>
       </template>
     </AppTable>
 
@@ -152,7 +177,8 @@ async function deleteStudent() {
       :show="showForm"
       :specialties="specialties"
       :selected-specialty-id="selectedSpecialty"
-      @close="showForm = false"
+      :student="editingStudent"
+      @close="closeForm"
       @submit="handleSubmit"
     />
 
@@ -193,5 +219,10 @@ async function deleteStudent() {
 .filters {
   margin-bottom: 20px;
   max-width: 300px;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 8px;
 }
 </style>

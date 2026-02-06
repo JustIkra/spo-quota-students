@@ -145,6 +145,7 @@ function copyPassword() {
       :columns="columns"
       :data="operatorsWithSpo"
       :loading="loading"
+      :page-size="20"
       empty-text="Нет зарегистрированных операторов"
     >
       <template #created_at="{ value }">

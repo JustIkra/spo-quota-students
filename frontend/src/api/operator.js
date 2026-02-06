@@ -19,6 +19,11 @@ export const operatorApi = {
     return response.data
   },
 
+  async updateStudent(id, data) {
+    const response = await api.put(`/students/${id}`, data)
+    return response.data
+  },
+
   async deleteStudent(id) {
     const response = await api.delete(`/students/${id}`)
     return response.data

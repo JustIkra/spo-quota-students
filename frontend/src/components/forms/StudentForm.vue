@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import AppInput from '../ui/AppInput.vue'
 import AppSelect from '../ui/AppSelect.vue'
 import AppButton from '../ui/AppButton.vue'
@@ -16,6 +16,10 @@ const props = defineProps({
   },
   selectedSpecialtyId: {
     type: [Number, String],
+    default: null
+  },
+  student: {
+    type: Object,
     default: null
   }
 })
@@ -35,14 +39,26 @@ const serverError = ref('')
 
 const specialtyOptions = ref([])
 
+const isEdit = computed(() => !!props.student)
+
 watch(() => props.show, (newVal) => {
   if (newVal) {
-    form.value = {
-      last_name: '',
-      first_name: '',
-      middle_name: '',
-      certificate_number: '',
-      specialty_id: props.selectedSpecialtyId || ''
+    if (props.student) {
+      form.value = {
+        last_name: props.student.last_name || '',
+        first_name: props.student.first_name || '',
+        middle_name: props.student.middle_name || '',
+        certificate_number: props.student.certificate_number || '',
+        specialty_id: props.student.specialty_id || ''
+      }
+    } else {
+      form.value = {
+        last_name: '',
+        first_name: '',
+        middle_name: '',
+        certificate_number: '',
+        specialty_id: props.selectedSpecialtyId || ''
+      }
     }
     errors.value = {}
     serverError.value = ''
@@ -90,7 +106,7 @@ async function submit() {
     if (error.response?.data?.detail) {
       serverError.value = error.response.data.detail
     } else {
-      serverError.value = 'Произошла ошибка при добавлении студента'
+      serverError.value = isEdit.value ? 'Произошла ошибка при обновлении студента' : 'Произошла ошибка при добавлении студента'
     }
   } finally {
     loading.value = false
@@ -107,7 +123,7 @@ defineExpose({ setError })
 <template>
   <AppModal
     :show="show"
-    title="Новый студент"
+    :title="isEdit ? 'Редактирование студента' : 'Новый студент'"
     @close="$emit('close')"
   >
     <form class="form" @submit.prevent="submit">
@@ -155,7 +171,7 @@ defineExpose({ setError })
         Отмена
       </AppButton>
       <AppButton :loading="loading" @click="submit">
-        Добавить
+        {{ isEdit ? 'Сохранить' : 'Добавить' }}
       </AppButton>
     </template>
   </AppModal>

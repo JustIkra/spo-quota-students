@@ -11,7 +11,7 @@ from app.api.deps import get_db, get_current_operator
 from app.models import User, Specialty, Student
 from app.schemas import (
     SpecialtyWithStats,
-    StudentCreate, StudentResponse, StudentWithSpecialty
+    StudentCreate, StudentUpdate, StudentResponse, StudentWithSpecialty
 )
 
 
@@ -169,6 +169,80 @@ def create_student(
         certificate_number=student_data.certificate_number
     )
     db.add(student)
+    db.commit()
+    db.refresh(student)
+    return student
+
+
+@router.put("/students/{student_id}", response_model=StudentResponse)
+def update_student(
+    student_id: int,
+    student_data: StudentUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_operator)
+):
+    """
+    Update student by ID (only from operator's SPO).
+    - If changing specialty, new specialty must belong to operator's SPO
+    - If changing certificate_number, must remain globally unique
+    """
+    # Get all specialties of operator's SPO
+    spo_specialty_ids = db.query(Specialty.id).filter(
+        Specialty.spo_id == current_user.spo_id
+    ).subquery()
+
+    student = db.query(Student).filter(
+        Student.id == student_id,
+        Student.specialty_id.in_(spo_specialty_ids)
+    ).first()
+
+    if not student:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Student not found or does not belong to your SPO"
+        )
+
+    update_data = student_data.model_dump(exclude_unset=True)
+
+    # If changing specialty, verify it belongs to operator's SPO and has quota
+    if 'specialty_id' in update_data and update_data['specialty_id'] != student.specialty_id:
+        new_specialty = db.query(Specialty).filter(
+            Specialty.id == update_data['specialty_id'],
+            Specialty.spo_id == current_user.spo_id
+        ).with_for_update().first()
+
+        if not new_specialty:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Specialty not found or does not belong to your SPO"
+            )
+
+        students_count = db.query(func.count(Student.id)).filter(
+            Student.specialty_id == new_specialty.id
+        ).scalar()
+
+        if students_count >= new_specialty.quota:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Quota exceeded. Current: {students_count}, Quota: {new_specialty.quota}"
+            )
+
+    # If changing certificate_number, check global uniqueness
+    if 'certificate_number' in update_data and update_data['certificate_number'] != student.certificate_number:
+        existing = db.query(Student).filter(
+            Student.certificate_number == update_data['certificate_number'],
+            Student.id != student_id
+        ).first()
+
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Студент с таким номером аттестата уже зарегистрирован в системе"
+            )
+
+    for key, value in update_data.items():
+        setattr(student, key, value)
+
     db.commit()
     db.refresh(student)
     return student
