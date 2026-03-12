@@ -15,19 +15,27 @@ services:
       retries: 5
     restart: unless-stopped
 
+  redis:
+    image: redis:7-alpine
+    container_name: spo_redis
+    restart: unless-stopped
+
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: spo_backend
     environment:
-      DATABASE_URL: postgresql://${DB_USER:-spo_user}:${DB_PASSWORD:-spo_password}@db:5432/${DB_NAME:-spo_quota}
+      DATABASE_URL: postgresql+asyncpg://${DB_USER:-spo_user}:${DB_PASSWORD:-spo_password}@db:5432/${DB_NAME:-spo_quota}
+      REDIS_URL: redis://redis:6379/0
       SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production}
       ADMIN_LOGIN: ${ADMIN_LOGIN:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_started
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
     restart: unless-stopped
 

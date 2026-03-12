@@ -1,26 +1,29 @@
 """
-Database connection and session management.
+Database connection and session management (async).
 """
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import settings
 
 
-# Create SQLAlchemy engine
-engine = create_engine(
+# Create async SQLAlchemy engine
+engine = create_async_engine(
     settings.DATABASE_URL,
     pool_pre_ping=True,
     pool_size=10,
     max_overflow=20
 )
 
-# Session factory
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-# Base class for models
-Base = declarative_base()
+# Async session factory
+AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 
-# Note: get_db dependency is defined in app.api.deps to avoid circular imports
-# and keep all API dependencies in one place
+class Base(DeclarativeBase):
+    pass
+
+
+async def init_db():
+    """Initialize database tables."""
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)

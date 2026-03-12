@@ -7,10 +7,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import text
+from sqlalchemy import select, text
 
 from app.core.config import settings
-from app.core.database import engine, Base, SessionLocal
+from app.core.database import engine, Base, AsyncSessionLocal, init_db
+from app.core.cache import init_cache, close_cache
 from app.core.security import get_password_hash
 from app.models import User, UserRole, Settings
 from app.services import init_settings
@@ -26,43 +27,35 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def init_db():
-    """Initialize database tables."""
-    Base.metadata.create_all(bind=engine)
-    logger.info("Database tables created")
-
-
-def create_initial_admin():
+async def create_initial_admin():
     """Create initial admin user if not exists."""
-    db = SessionLocal()
-    try:
-        # Check if admin exists
-        admin = db.query(User).filter(User.role == UserRole.ADMIN).first()
-        if not admin:
-            admin = User(
-                login=settings.ADMIN_LOGIN,
-                password_hash=get_password_hash(settings.ADMIN_PASSWORD),
-                role=UserRole.ADMIN,
-                spo_id=None
-            )
-            db.add(admin)
-            db.commit()
-            logger.info(f"Admin user created with login: {settings.ADMIN_LOGIN}")
-        else:
-            admin.login = settings.ADMIN_LOGIN
-            admin.password_hash = get_password_hash(settings.ADMIN_PASSWORD)
-            db.commit()
-            logger.info("Admin credentials synced from environment")
+    async with AsyncSessionLocal() as db:
+        try:
+            result = await db.execute(select(User).where(User.role == UserRole.ADMIN))
+            admin = result.scalars().first()
+            if not admin:
+                admin = User(
+                    login=settings.ADMIN_LOGIN,
+                    password_hash=get_password_hash(settings.ADMIN_PASSWORD),
+                    role=UserRole.ADMIN,
+                    spo_id=None
+                )
+                db.add(admin)
+                await db.commit()
+                logger.info(f"Admin user created with login: {settings.ADMIN_LOGIN}")
+            else:
+                admin.login = settings.ADMIN_LOGIN
+                admin.password_hash = get_password_hash(settings.ADMIN_PASSWORD)
+                await db.commit()
+                logger.info("Admin credentials synced from environment")
 
-        # Initialize settings
-        init_settings(db)
-        logger.info("Settings initialized")
+            # Initialize settings
+            await init_settings(db)
+            logger.info("Settings initialized")
 
-    except Exception as e:
-        logger.error(f"Error during initialization: {e}")
-        db.rollback()
-    finally:
-        db.close()
+        except Exception as e:
+            logger.error(f"Error during initialization: {e}")
+            await db.rollback()
 
 
 @asynccontextmanager
@@ -70,11 +63,14 @@ async def lifespan(app: FastAPI):
     """Application lifespan - startup and shutdown events."""
     # Startup
     logger.info("Starting application...")
-    init_db()
-    create_initial_admin()
+    await init_db()
+    logger.info("Database tables created")
+    await create_initial_admin()
+    await init_cache()
     yield
     # Shutdown
     logger.info("Shutting down application...")
+    await close_cache()
 
 
 # Create FastAPI app
@@ -127,13 +123,13 @@ app.include_router(stats_router)
 
 
 @app.get("/", tags=["Health"])
-def root():
+async def root():
     """Health check endpoint."""
     return {"status": "ok", "message": "SPO Quota Students API is running"}
 
 
 @app.get("/health", tags=["Health"])
-def health_check():
+async def health_check():
     """
     Health check endpoint with database connectivity check (SUGGEST-003).
     Returns status of the application and its dependencies.
@@ -147,9 +143,8 @@ def health_check():
 
     # Check database connectivity
     try:
-        db = SessionLocal()
-        db.execute(text("SELECT 1"))
-        db.close()
+        async with AsyncSessionLocal() as db:
+            await db.execute(text("SELECT 1"))
         health_status["checks"]["database"] = "healthy"
     except Exception as e:
         logger.error(f"Database health check failed: {e}")

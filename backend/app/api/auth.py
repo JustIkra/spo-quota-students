@@ -5,7 +5,8 @@ from collections import defaultdict
 from time import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db, get_current_user
 from app.models import User
@@ -42,7 +43,7 @@ def _check_login_rate_limit(ip: str) -> None:
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(user_data: UserLogin, request: Request, db: Session = Depends(get_db)):
+async def login(user_data: UserLogin, request: Request, db: AsyncSession = Depends(get_db)):
     """
     Authenticate user and return JWT token.
     Rate limited to 5 attempts per minute per IP.
@@ -55,7 +56,7 @@ def login(user_data: UserLogin, request: Request, db: Session = Depends(get_db))
 
     _check_login_rate_limit(client_ip)
 
-    user = authenticate_user(db, user_data.login, user_data.password)
+    user = await authenticate_user(db, user_data.login, user_data.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -68,13 +69,19 @@ def login(user_data: UserLogin, request: Request, db: Session = Depends(get_db))
 
 
 @router.get("/me", response_model=CurrentUser)
-def get_me(current_user: User = Depends(get_current_user)):
+async def get_me(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """
     Get current user information.
     """
-    spo_name = None
-    if current_user.spo:
-        spo_name = current_user.spo.name
+    # Eagerly load spo relationship to avoid lazy load in async context
+    if current_user.spo_id:
+        from sqlalchemy import select
+        from app.models import SPO
+        result = await db.execute(select(SPO).where(SPO.id == current_user.spo_id))
+        spo = result.scalars().first()
+        spo_name = spo.name if spo else None
+    else:
+        spo_name = None
 
     return CurrentUser(
         id=current_user.id,

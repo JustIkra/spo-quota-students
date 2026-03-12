@@ -1,13 +1,14 @@
 """
 API dependencies - common dependencies for endpoints.
 """
-from typing import Generator
+from typing import AsyncGenerator
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import SessionLocal
+from app.core.database import AsyncSessionLocal
 from app.core.security import decode_access_token
 from app.models import User, UserRole
 
@@ -16,18 +17,15 @@ from app.models import User, UserRole
 security = HTTPBearer()
 
 
-def get_db() -> Generator:
-    """Dependency to get database session."""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    """Dependency to get async database session."""
+    async with AsyncSessionLocal() as session:
+        yield session
 
 
-def get_current_user(
+async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ) -> User:
     """Get current authenticated user from JWT token."""
     token = credentials.credentials
@@ -48,7 +46,8 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"}
         )
 
-    user = db.query(User).filter(User.id == int(user_id)).first()
+    result = await db.execute(select(User).where(User.id == int(user_id)))
+    user = result.scalars().first()
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

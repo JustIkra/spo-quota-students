@@ -4,8 +4,8 @@ Admin API endpoints - SPO, operators, specialty templates, settings management.
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import select, func, update, delete
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db, get_current_admin
 from app.models import User, UserRole, SPO, SpecialtyTemplate, Specialty, Student
@@ -17,6 +17,7 @@ from app.schemas import (
     SettingsResponse, SettingsUpdate
 )
 from app.services import create_operator, reset_password, get_base_quota, set_base_quota
+from app.core.cache import cached, invalidate
 
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
@@ -25,8 +26,9 @@ router = APIRouter(prefix="/api/admin", tags=["Admin"])
 # ==================== SPO Management ====================
 
 @router.get("/spo", response_model=List[SPOWithStats])
-def list_spo(
-    db: Session = Depends(get_db),
+@cached("admin:spo")
+async def list_spo(
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin)
 ):
     """
@@ -35,7 +37,7 @@ def list_spo(
     """
     # Subquery: count specialties per SPO
     specialties_subq = (
-        db.query(
+        select(
             Specialty.spo_id,
             func.count(Specialty.id).label("specialties_count")
         )
@@ -45,7 +47,7 @@ def list_spo(
 
     # Subquery: count students per SPO (via specialty)
     students_subq = (
-        db.query(
+        select(
             Specialty.spo_id,
             func.count(Student.id).label("students_count")
         )
@@ -56,18 +58,18 @@ def list_spo(
 
     # Subquery: count operators per SPO
     operators_subq = (
-        db.query(
+        select(
             User.spo_id,
             func.count(User.id).label("operators_count")
         )
-        .filter(User.role == UserRole.OPERATOR)
+        .where(User.role == UserRole.OPERATOR)
         .group_by(User.spo_id)
         .subquery()
     )
 
     # Main query with all counts in single query
-    result = (
-        db.query(
+    stmt = (
+        select(
             SPO.id,
             SPO.name,
             SPO.created_at,
@@ -78,8 +80,9 @@ def list_spo(
         .outerjoin(specialties_subq, SPO.id == specialties_subq.c.spo_id)
         .outerjoin(students_subq, SPO.id == students_subq.c.spo_id)
         .outerjoin(operators_subq, SPO.id == operators_subq.c.spo_id)
-        .all()
     )
+    result = await db.execute(stmt)
+    rows = result.all()
 
     return [
         SPOWithStats(
@@ -90,14 +93,14 @@ def list_spo(
             students_count=row.students_count,
             operators_count=row.operators_count
         )
-        for row in result
+        for row in rows
     ]
 
 
 @router.post("/spo", response_model=SPOResponse, status_code=status.HTTP_201_CREATED)
-def create_spo(
+async def create_spo(
     spo_data: SPOCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin)
 ):
     """
@@ -105,39 +108,43 @@ def create_spo(
     """
     spo = SPO(name=spo_data.name)
     db.add(spo)
-    db.commit()
-    db.refresh(spo)
+    await db.commit()
+    await db.refresh(spo)
+    await invalidate("admin:spo", "stats")
     return spo
 
 
 @router.get("/spo/{spo_id}", response_model=SPOWithStats)
-def get_spo(
+async def get_spo(
     spo_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin)
 ):
     """
     Get SPO by ID with statistics.
     """
-    spo = db.query(SPO).filter(SPO.id == spo_id).first()
+    result = await db.execute(select(SPO).where(SPO.id == spo_id))
+    spo = result.scalars().first()
     if not spo:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="SPO not found"
         )
 
-    specialties_count = db.query(func.count(Specialty.id)).filter(
-        Specialty.spo_id == spo.id
-    ).scalar()
+    spec_count_result = await db.execute(
+        select(func.count(Specialty.id)).where(Specialty.spo_id == spo.id)
+    )
+    specialties_count = spec_count_result.scalar()
 
-    students_count = db.query(func.count(Student.id)).join(Specialty).filter(
-        Specialty.spo_id == spo.id
-    ).scalar()
+    stud_count_result = await db.execute(
+        select(func.count(Student.id)).join(Specialty).where(Specialty.spo_id == spo.id)
+    )
+    students_count = stud_count_result.scalar()
 
-    operators_count = db.query(func.count(User.id)).filter(
-        User.spo_id == spo.id,
-        User.role == UserRole.OPERATOR
-    ).scalar()
+    op_count_result = await db.execute(
+        select(func.count(User.id)).where(User.spo_id == spo.id, User.role == UserRole.OPERATOR)
+    )
+    operators_count = op_count_result.scalar()
 
     return SPOWithStats(
         id=spo.id,
@@ -150,16 +157,17 @@ def get_spo(
 
 
 @router.put("/spo/{spo_id}", response_model=SPOResponse)
-def update_spo(
+async def update_spo(
     spo_id: int,
     spo_data: SPOUpdate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin)
 ):
     """
     Update SPO by ID.
     """
-    spo = db.query(SPO).filter(SPO.id == spo_id).first()
+    result = await db.execute(select(SPO).where(SPO.id == spo_id))
+    spo = result.scalars().first()
     if not spo:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -169,21 +177,23 @@ def update_spo(
     if spo_data.name is not None:
         spo.name = spo_data.name
 
-    db.commit()
-    db.refresh(spo)
+    await db.commit()
+    await db.refresh(spo)
+    await invalidate("admin:spo", "stats")
     return spo
 
 
 @router.delete("/spo/{spo_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_spo(
+async def delete_spo(
     spo_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin)
 ):
     """
     Delete SPO by ID. Also removes associated specialties, students, and operators.
     """
-    spo = db.query(SPO).filter(SPO.id == spo_id).first()
+    result = await db.execute(select(SPO).where(SPO.id == spo_id))
+    spo = result.scalars().first()
     if not spo:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -191,31 +201,33 @@ def delete_spo(
         )
 
     # Remove operators assigned to this SPO
-    db.query(User).filter(User.spo_id == spo_id).delete()
+    await db.execute(delete(User).where(User.spo_id == spo_id))
 
     # SPO deletion will cascade to specialties and students
-    db.delete(spo)
-    db.commit()
+    await db.delete(spo)
+    await db.commit()
+    await invalidate("admin:spo", "stats")
 
 
 # ==================== Operators Management ====================
 
 @router.get("/operators", response_model=List[UserResponse])
-def list_operators(
-    db: Session = Depends(get_db),
+async def list_operators(
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin)
 ):
     """
     Get list of all operators.
     """
-    operators = db.query(User).filter(User.role == UserRole.OPERATOR).all()
+    result = await db.execute(select(User).where(User.role == UserRole.OPERATOR))
+    operators = result.scalars().all()
     return operators
 
 
 @router.post("/operators", response_model=UserWithPassword, status_code=status.HTTP_201_CREATED)
-def create_operator_endpoint(
+async def create_operator_endpoint(
     user_data: UserCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin)
 ):
     """
@@ -223,7 +235,8 @@ def create_operator_endpoint(
     Each SPO can have only one operator.
     """
     # Check if SPO exists
-    spo = db.query(SPO).filter(SPO.id == user_data.spo_id).first()
+    result = await db.execute(select(SPO).where(SPO.id == user_data.spo_id))
+    spo = result.scalars().first()
     if not spo:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -231,10 +244,10 @@ def create_operator_endpoint(
         )
 
     # Check if SPO already has an operator
-    existing_operator = db.query(User).filter(
-        User.spo_id == user_data.spo_id,
-        User.role == UserRole.OPERATOR
-    ).first()
+    result = await db.execute(
+        select(User).where(User.spo_id == user_data.spo_id, User.role == UserRole.OPERATOR)
+    )
+    existing_operator = result.scalars().first()
     if existing_operator:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -242,8 +255,9 @@ def create_operator_endpoint(
         )
 
     # Create operator with generated credentials
-    user, password = create_operator(db, user_data.spo_id, spo.name)
+    user, password = await create_operator(db, user_data.spo_id, spo.name)
 
+    await invalidate("admin:spo")
     return UserWithPassword(
         id=user.id,
         login=user.login,
@@ -255,18 +269,18 @@ def create_operator_endpoint(
 
 
 @router.delete("/operators/{operator_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_operator(
+async def delete_operator(
     operator_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin)
 ):
     """
     Delete operator by ID.
     """
-    operator = db.query(User).filter(
-        User.id == operator_id,
-        User.role == UserRole.OPERATOR
-    ).first()
+    result = await db.execute(
+        select(User).where(User.id == operator_id, User.role == UserRole.OPERATOR)
+    )
+    operator = result.scalars().first()
 
     if not operator:
         raise HTTPException(
@@ -274,23 +288,24 @@ def delete_operator(
             detail="Operator not found"
         )
 
-    db.delete(operator)
-    db.commit()
+    await db.delete(operator)
+    await db.commit()
+    await invalidate("admin:spo")
 
 
 @router.post("/operators/{operator_id}/reset-password", response_model=UserWithPassword)
-def reset_operator_password(
+async def reset_operator_password(
     operator_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin)
 ):
     """
     Reset operator password. Returns new generated password.
     """
-    operator = db.query(User).filter(
-        User.id == operator_id,
-        User.role == UserRole.OPERATOR
-    ).first()
+    result = await db.execute(
+        select(User).where(User.id == operator_id, User.role == UserRole.OPERATOR)
+    )
+    operator = result.scalars().first()
 
     if not operator:
         raise HTTPException(
@@ -298,7 +313,7 @@ def reset_operator_password(
             detail="Operator not found"
         )
 
-    user, password = reset_password(db, operator_id)
+    user, password = await reset_password(db, operator_id)
 
     return UserWithPassword(
         id=user.id,
@@ -313,16 +328,17 @@ def reset_operator_password(
 # ==================== Specialty Quota Management ====================
 
 @router.put("/specialties/{specialty_id}/quota", response_model=SpecialtyResponse)
-def update_specialty_quota(
+async def update_specialty_quota(
     specialty_id: int,
     quota_data: QuotaUpdate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin)
 ):
     """
     Update specialty quota.
     """
-    specialty = db.query(Specialty).filter(Specialty.id == specialty_id).first()
+    result = await db.execute(select(Specialty).where(Specialty.id == specialty_id))
+    specialty = result.scalars().first()
     if not specialty:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -330,59 +346,64 @@ def update_specialty_quota(
         )
 
     specialty.quota = quota_data.quota
-    db.commit()
-    db.refresh(specialty)
+    await db.commit()
+    await db.refresh(specialty)
+    await invalidate("admin:specialties", "op:specialties", "stats")
     return specialty
 
 
 # ==================== Settings Management ====================
 
 @router.get("/settings", response_model=SettingsResponse)
-def get_settings(
-    db: Session = Depends(get_db),
+async def get_settings(
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin)
 ):
     """
     Get application settings.
     """
-    base_quota = get_base_quota(db)
+    base_quota = await get_base_quota(db)
     return SettingsResponse(base_quota=base_quota)
 
 
 @router.put("/settings", response_model=SettingsResponse)
-def update_settings(
+async def update_settings(
     settings_data: SettingsUpdate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin)
 ):
     """
     Update application settings.
     """
-    base_quota = set_base_quota(db, settings_data.base_quota)
+    base_quota = await set_base_quota(db, settings_data.base_quota)
+    await invalidate("stats")
     return SettingsResponse(base_quota=base_quota)
 
 
 # ==================== Specialty Templates (Catalog) Management ====================
 
 @router.get("/specialty-templates", response_model=List[SpecialtyTemplateWithUsage])
-def list_specialty_templates(
-    db: Session = Depends(get_db),
+@cached("admin:templates", ttl=600)
+async def list_specialty_templates(
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin)
 ):
     """
     Get list of all specialty templates with usage count.
     """
     # Get all templates
-    templates = db.query(SpecialtyTemplate).order_by(SpecialtyTemplate.code).all()
+    result = await db.execute(select(SpecialtyTemplate).order_by(SpecialtyTemplate.code))
+    templates = result.scalars().all()
 
     # Get SPO names grouped by template_id
-    spo_by_template = (
-        db.query(Specialty.template_id, SPO.name)
+    stmt = (
+        select(Specialty.template_id, SPO.name)
         .join(SPO, Specialty.spo_id == SPO.id)
-        .filter(Specialty.template_id.isnot(None))
+        .where(Specialty.template_id.isnot(None))
         .distinct()
-        .all()
     )
+    result = await db.execute(stmt)
+    spo_by_template = result.all()
 
     # Build mapping: template_id -> list of SPO names
     spo_names_map = {}
@@ -403,18 +424,19 @@ def list_specialty_templates(
 
 
 @router.post("/specialty-templates", response_model=SpecialtyTemplateResponse, status_code=status.HTTP_201_CREATED)
-def create_specialty_template(
+async def create_specialty_template(
     template_data: SpecialtyTemplateCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin)
 ):
     """
     Create new specialty template in the global catalog.
     """
     # Check for duplicate code
-    existing = db.query(SpecialtyTemplate).filter(
-        SpecialtyTemplate.code == template_data.code
-    ).first()
+    result = await db.execute(
+        select(SpecialtyTemplate).where(SpecialtyTemplate.code == template_data.code)
+    )
+    existing = result.scalars().first()
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -426,22 +448,24 @@ def create_specialty_template(
         name=template_data.name
     )
     db.add(template)
-    db.commit()
-    db.refresh(template)
+    await db.commit()
+    await db.refresh(template)
+    await invalidate("admin:templates")
     return template
 
 
 @router.put("/specialty-templates/{template_id}", response_model=SpecialtyTemplateResponse)
-def update_specialty_template(
+async def update_specialty_template(
     template_id: int,
     template_data: SpecialtyTemplateUpdate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin)
 ):
     """
     Update specialty template.
     """
-    template = db.query(SpecialtyTemplate).filter(SpecialtyTemplate.id == template_id).first()
+    result = await db.execute(select(SpecialtyTemplate).where(SpecialtyTemplate.id == template_id))
+    template = result.scalars().first()
     if not template:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -450,10 +474,13 @@ def update_specialty_template(
 
     if template_data.code is not None:
         # Check for duplicate code
-        existing = db.query(SpecialtyTemplate).filter(
-            SpecialtyTemplate.code == template_data.code,
-            SpecialtyTemplate.id != template_id
-        ).first()
+        result = await db.execute(
+            select(SpecialtyTemplate).where(
+                SpecialtyTemplate.code == template_data.code,
+                SpecialtyTemplate.id != template_id
+            )
+        )
+        existing = result.scalars().first()
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -466,63 +493,72 @@ def update_specialty_template(
 
     # Update all assigned specialties to sync name/code
     if template_data.code is not None or template_data.name is not None:
-        db.query(Specialty).filter(Specialty.template_id == template_id).update({
-            Specialty.code: template.code,
-            Specialty.name: template.name
-        })
+        await db.execute(
+            update(Specialty)
+            .where(Specialty.template_id == template_id)
+            .values(code=template.code, name=template.name)
+        )
 
-    db.commit()
-    db.refresh(template)
+    await db.commit()
+    await db.refresh(template)
+    await invalidate("admin:templates", "admin:specialties", "op:specialties", "stats")
     return template
 
 
 @router.delete("/specialty-templates/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_specialty_template(
+async def delete_specialty_template(
     template_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin)
 ):
     """
     Delete specialty template. Also removes all assignments to SPOs (and their students).
     """
-    template = db.query(SpecialtyTemplate).filter(SpecialtyTemplate.id == template_id).first()
+    result = await db.execute(select(SpecialtyTemplate).where(SpecialtyTemplate.id == template_id))
+    template = result.scalars().first()
     if not template:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Специальность/профессия не найдена в справочнике"
         )
 
-    db.delete(template)
-    db.commit()
+    await db.delete(template)
+    await db.commit()
+    await invalidate("admin:templates", "admin:specialties", "op:specialties", "stats", "admin:spo")
 
 
 # ==================== Specialties Assignment Management ====================
 
 @router.get("/specialties", response_model=List[SpecialtyWithStats])
-def list_all_specialties(
+@cached("admin:specialties")
+async def list_all_specialties(
     spo_id: int = None,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin)
 ):
     """
     Get list of all assigned specialties with stats.
     Optionally filter by spo_id.
     """
-    query = db.query(Specialty)
+    stmt = select(Specialty)
     if spo_id is not None:
-        query = query.filter(Specialty.spo_id == spo_id)
+        stmt = stmt.where(Specialty.spo_id == spo_id)
 
-    specialties = query.all()
+    result = await db.execute(stmt)
+    specialties = result.scalars().all()
 
-    result = []
+    items = []
     for specialty in specialties:
-        students_count = db.query(func.count(Student.id)).filter(
-            Student.specialty_id == specialty.id
-        ).scalar()
+        count_result = await db.execute(
+            select(func.count(Student.id)).where(Student.specialty_id == specialty.id)
+        )
+        students_count = count_result.scalar()
 
-        spo_name = specialty.spo.name if specialty.spo else None
+        # Load SPO name explicitly to avoid lazy loading
+        spo_result = await db.execute(select(SPO.name).where(SPO.id == specialty.spo_id))
+        spo_name = spo_result.scalar()
 
-        result.append(SpecialtyWithStats(
+        items.append(SpecialtyWithStats(
             id=specialty.id,
             spo_id=specialty.spo_id,
             template_id=specialty.template_id,
@@ -535,20 +571,21 @@ def list_all_specialties(
             spo_name=spo_name
         ))
 
-    return result
+    return items
 
 
 @router.post("/specialties", response_model=SpecialtyResponse, status_code=status.HTTP_201_CREATED)
-def assign_specialty_to_spo(
+async def assign_specialty_to_spo(
     data: SpecialtyAssign,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin)
 ):
     """
     Assign specialty template to SPO with quota.
     """
     # Check template exists
-    template = db.query(SpecialtyTemplate).filter(SpecialtyTemplate.id == data.template_id).first()
+    result = await db.execute(select(SpecialtyTemplate).where(SpecialtyTemplate.id == data.template_id))
+    template = result.scalars().first()
     if not template:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -556,7 +593,8 @@ def assign_specialty_to_spo(
         )
 
     # Check SPO exists
-    spo = db.query(SPO).filter(SPO.id == data.spo_id).first()
+    result = await db.execute(select(SPO).where(SPO.id == data.spo_id))
+    spo = result.scalars().first()
     if not spo:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -564,10 +602,10 @@ def assign_specialty_to_spo(
         )
 
     # Check if already assigned
-    existing = db.query(Specialty).filter(
-        Specialty.spo_id == data.spo_id,
-        Specialty.template_id == data.template_id
-    ).first()
+    result = await db.execute(
+        select(Specialty).where(Specialty.spo_id == data.spo_id, Specialty.template_id == data.template_id)
+    )
+    existing = result.scalars().first()
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -575,7 +613,7 @@ def assign_specialty_to_spo(
         )
 
     # Get quota from settings if not provided
-    quota = data.quota if data.quota is not None else get_base_quota(db)
+    quota = data.quota if data.quota is not None else await get_base_quota(db)
 
     specialty = Specialty(
         spo_id=data.spo_id,
@@ -585,26 +623,29 @@ def assign_specialty_to_spo(
         quota=quota
     )
     db.add(specialty)
-    db.commit()
-    db.refresh(specialty)
+    await db.commit()
+    await db.refresh(specialty)
+    await invalidate("admin:specialties", "op:specialties", "stats", "admin:spo")
     return specialty
 
 
 @router.delete("/specialties/{specialty_id}", status_code=status.HTTP_204_NO_CONTENT)
-def unassign_specialty_from_spo(
+async def unassign_specialty_from_spo(
     specialty_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin)
 ):
     """
     Remove specialty assignment from SPO. Also deletes all students in this specialty.
     """
-    specialty = db.query(Specialty).filter(Specialty.id == specialty_id).first()
+    result = await db.execute(select(Specialty).where(Specialty.id == specialty_id))
+    specialty = result.scalars().first()
     if not specialty:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Специальность/профессия не найдена"
         )
 
-    db.delete(specialty)
-    db.commit()
+    await db.delete(specialty)
+    await db.commit()
+    await invalidate("admin:specialties", "op:specialties", "stats", "admin:spo")

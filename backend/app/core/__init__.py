@@ -1,6 +1,6 @@
 """Core module - configuration, security, database."""
 from app.core.config import settings
-from app.core.database import Base, engine, SessionLocal
+from app.core.database import Base, engine, AsyncSessionLocal
 from app.core.security import (
     verify_password,
     get_password_hash,

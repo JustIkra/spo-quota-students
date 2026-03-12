@@ -4,15 +4,15 @@ Operator API endpoints - specialties viewing and students management.
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session
-from sqlalchemy import func
-
+from sqlalchemy import select, func
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_db, get_current_operator
-from app.models import User, Specialty, Student
+from app.models import User, Specialty, Student, SPO
 from app.schemas import (
     SpecialtyWithStats,
     StudentCreate, StudentUpdate, StudentResponse, StudentWithSpecialty
 )
+from app.core.cache import cached, invalidate
 
 
 router = APIRouter(prefix="/api", tags=["Operator"])
@@ -21,25 +21,28 @@ router = APIRouter(prefix="/api", tags=["Operator"])
 # ==================== Specialties Viewing (Read-Only) ====================
 
 @router.get("/specialties", response_model=List[SpecialtyWithStats])
-def list_specialties(
-    db: Session = Depends(get_db),
+@cached("op:specialties")
+async def list_specialties(
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_operator)
 ):
     """
     Get list of specialties assigned to operator's SPO (read-only).
     Specialty management is done by admin.
     """
-    specialties = db.query(Specialty).filter(
-        Specialty.spo_id == current_user.spo_id
-    ).all()
+    result = await db.execute(
+        select(Specialty).where(Specialty.spo_id == current_user.spo_id)
+    )
+    specialties = result.scalars().all()
 
-    result = []
+    items = []
     for specialty in specialties:
-        students_count = db.query(func.count(Student.id)).filter(
-            Student.specialty_id == specialty.id
-        ).scalar()
+        count_result = await db.execute(
+            select(func.count(Student.id)).where(Student.specialty_id == specialty.id)
+        )
+        students_count = count_result.scalar()
 
-        result.append(SpecialtyWithStats(
+        items.append(SpecialtyWithStats(
             id=specialty.id,
             spo_id=specialty.spo_id,
             template_id=specialty.template_id,
@@ -51,17 +54,18 @@ def list_specialties(
             available_slots=max(0, specialty.quota - students_count)
         ))
 
-    return result
+    return items
 
 
 # ==================== Students Management ====================
 
 @router.get("/students", response_model=List[StudentWithSpecialty])
-def list_students(
+@cached("op:students", ttl=120)
+async def list_students(
     specialty_id: Optional[int] = None,
     skip: int = Query(0, ge=0, description="Number of records to skip (pagination)"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_operator)
 ):
     """
@@ -70,36 +74,45 @@ def list_students(
     Optional filter by specialty_id.
     """
     # Get all specialties of operator's SPO
-    spo_specialty_ids = db.query(Specialty.id).filter(
-        Specialty.spo_id == current_user.spo_id
-    ).subquery()
+    spo_specialty_ids = select(Specialty.id).where(Specialty.spo_id == current_user.spo_id)
 
-    query = db.query(Student).filter(
-        Student.specialty_id.in_(spo_specialty_ids)
-    )
+    stmt = select(Student).where(Student.specialty_id.in_(spo_specialty_ids))
 
     if specialty_id is not None:
         # Verify specialty belongs to operator's SPO
-        specialty = db.query(Specialty).filter(
-            Specialty.id == specialty_id,
-            Specialty.spo_id == current_user.spo_id
-        ).first()
+        spec_result = await db.execute(
+            select(Specialty).where(
+                Specialty.id == specialty_id,
+                Specialty.spo_id == current_user.spo_id
+            )
+        )
+        specialty = spec_result.scalars().first()
         if not specialty:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Specialty not found or does not belong to your SPO"
             )
-        query = query.filter(Student.specialty_id == specialty_id)
+        stmt = select(Student).where(Student.specialty_id == specialty_id)
 
-    # Apply pagination (SUGGEST-001)
-    students = query.offset(skip).limit(limit).all()
+    stmt = stmt.offset(skip).limit(limit)
 
-    result = []
+    result = await db.execute(stmt)
+    students = result.scalars().all()
+
+    items = []
     for student in students:
-        specialty = student.specialty
-        spo_name = specialty.spo.name if specialty.spo else None
+        # Load specialty and SPO explicitly
+        spec_result = await db.execute(
+            select(Specialty).where(Specialty.id == student.specialty_id)
+        )
+        specialty = spec_result.scalars().first()
 
-        result.append(StudentWithSpecialty(
+        spo_name = None
+        if specialty:
+            spo_result = await db.execute(select(SPO.name).where(SPO.id == specialty.spo_id))
+            spo_name = spo_result.scalar()
+
+        items.append(StudentWithSpecialty(
             id=student.id,
             specialty_id=student.specialty_id,
             first_name=student.first_name,
@@ -107,17 +120,17 @@ def list_students(
             middle_name=student.middle_name,
             certificate_number=student.certificate_number,
             created_at=student.created_at,
-            specialty_name=specialty.name,
+            specialty_name=specialty.name if specialty else None,
             spo_name=spo_name
         ))
 
-    return result
+    return items
 
 
 @router.post("/students", response_model=StudentResponse, status_code=status.HTTP_201_CREATED)
-def create_student(
+async def create_student(
     student_data: StudentCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_operator)
 ):
     """
@@ -127,11 +140,12 @@ def create_student(
     - Must have available quota slots
     """
     # Lock the specialty row with FOR UPDATE to prevent race conditions (TOCTOU)
-    # This ensures the quota check and insert are atomic within the transaction
-    specialty = db.query(Specialty).filter(
-        Specialty.id == student_data.specialty_id,
-        Specialty.spo_id == current_user.spo_id
-    ).with_for_update().first()
+    result = await db.execute(
+        select(Specialty)
+        .where(Specialty.id == student_data.specialty_id, Specialty.spo_id == current_user.spo_id)
+        .with_for_update()
+    )
+    specialty = result.scalars().first()
 
     if not specialty:
         raise HTTPException(
@@ -140,9 +154,10 @@ def create_student(
         )
 
     # Check quota availability (now safe from race conditions due to row lock)
-    students_count = db.query(func.count(Student.id)).filter(
-        Student.specialty_id == specialty.id
-    ).scalar()
+    count_result = await db.execute(
+        select(func.count(Student.id)).where(Student.specialty_id == specialty.id)
+    )
+    students_count = count_result.scalar()
 
     if students_count >= specialty.quota:
         raise HTTPException(
@@ -151,9 +166,10 @@ def create_student(
         )
 
     # Check global uniqueness of certificate_number
-    existing_student = db.query(Student).filter(
-        Student.certificate_number == student_data.certificate_number
-    ).first()
+    existing_result = await db.execute(
+        select(Student).where(Student.certificate_number == student_data.certificate_number)
+    )
+    existing_student = existing_result.scalars().first()
 
     if existing_student:
         raise HTTPException(
@@ -169,16 +185,17 @@ def create_student(
         certificate_number=student_data.certificate_number
     )
     db.add(student)
-    db.commit()
-    db.refresh(student)
+    await db.commit()
+    await db.refresh(student)
+    await invalidate("op:students", "op:specialties", "stats", "admin:spo")
     return student
 
 
 @router.put("/students/{student_id}", response_model=StudentResponse)
-def update_student(
+async def update_student(
     student_id: int,
     student_data: StudentUpdate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_operator)
 ):
     """
@@ -187,14 +204,15 @@ def update_student(
     - If changing certificate_number, must remain globally unique
     """
     # Get all specialties of operator's SPO
-    spo_specialty_ids = db.query(Specialty.id).filter(
-        Specialty.spo_id == current_user.spo_id
-    ).subquery()
+    spo_specialty_ids = select(Specialty.id).where(Specialty.spo_id == current_user.spo_id)
 
-    student = db.query(Student).filter(
-        Student.id == student_id,
-        Student.specialty_id.in_(spo_specialty_ids)
-    ).first()
+    result = await db.execute(
+        select(Student).where(
+            Student.id == student_id,
+            Student.specialty_id.in_(spo_specialty_ids)
+        )
+    )
+    student = result.scalars().first()
 
     if not student:
         raise HTTPException(
@@ -206,10 +224,12 @@ def update_student(
 
     # If changing specialty, verify it belongs to operator's SPO and has quota
     if 'specialty_id' in update_data and update_data['specialty_id'] != student.specialty_id:
-        new_specialty = db.query(Specialty).filter(
-            Specialty.id == update_data['specialty_id'],
-            Specialty.spo_id == current_user.spo_id
-        ).with_for_update().first()
+        new_spec_result = await db.execute(
+            select(Specialty)
+            .where(Specialty.id == update_data['specialty_id'], Specialty.spo_id == current_user.spo_id)
+            .with_for_update()
+        )
+        new_specialty = new_spec_result.scalars().first()
 
         if not new_specialty:
             raise HTTPException(
@@ -217,9 +237,10 @@ def update_student(
                 detail="Specialty not found or does not belong to your SPO"
             )
 
-        students_count = db.query(func.count(Student.id)).filter(
-            Student.specialty_id == new_specialty.id
-        ).scalar()
+        count_result = await db.execute(
+            select(func.count(Student.id)).where(Student.specialty_id == new_specialty.id)
+        )
+        students_count = count_result.scalar()
 
         if students_count >= new_specialty.quota:
             raise HTTPException(
@@ -229,10 +250,13 @@ def update_student(
 
     # If changing certificate_number, check global uniqueness
     if 'certificate_number' in update_data and update_data['certificate_number'] != student.certificate_number:
-        existing = db.query(Student).filter(
-            Student.certificate_number == update_data['certificate_number'],
-            Student.id != student_id
-        ).first()
+        existing_result = await db.execute(
+            select(Student).where(
+                Student.certificate_number == update_data['certificate_number'],
+                Student.id != student_id
+            )
+        )
+        existing = existing_result.scalars().first()
 
         if existing:
             raise HTTPException(
@@ -243,29 +267,31 @@ def update_student(
     for key, value in update_data.items():
         setattr(student, key, value)
 
-    db.commit()
-    db.refresh(student)
+    await db.commit()
+    await db.refresh(student)
+    await invalidate("op:students", "op:specialties", "stats", "admin:spo")
     return student
 
 
 @router.delete("/students/{student_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_student(
+async def delete_student(
     student_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_operator)
 ):
     """
     Delete student by ID (only from operator's SPO).
     """
     # Get all specialties of operator's SPO
-    spo_specialty_ids = db.query(Specialty.id).filter(
-        Specialty.spo_id == current_user.spo_id
-    ).subquery()
+    spo_specialty_ids = select(Specialty.id).where(Specialty.spo_id == current_user.spo_id)
 
-    student = db.query(Student).filter(
-        Student.id == student_id,
-        Student.specialty_id.in_(spo_specialty_ids)
-    ).first()
+    result = await db.execute(
+        select(Student).where(
+            Student.id == student_id,
+            Student.specialty_id.in_(spo_specialty_ids)
+        )
+    )
+    student = result.scalars().first()
 
     if not student:
         raise HTTPException(
@@ -273,5 +299,6 @@ def delete_student(
             detail="Student not found or does not belong to your SPO"
         )
 
-    db.delete(student)
-    db.commit()
+    await db.delete(student)
+    await db.commit()
+    await invalidate("op:students", "op:specialties", "stats", "admin:spo")

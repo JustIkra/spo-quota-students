@@ -19,7 +19,10 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
 
     # Database
-    DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/spo_quota"
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/spo_quota"
+
+    # Redis
+    REDIS_URL: str = "redis://localhost:6379/0"
 
     # JWT
     SECRET_KEY: str = _DEFAULT_SECRET_KEY
