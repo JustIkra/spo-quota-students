@@ -49,7 +49,10 @@ def create_initial_admin():
             db.commit()
             logger.info(f"Admin user created with login: {settings.ADMIN_LOGIN}")
         else:
-            logger.info("Admin user already exists")
+            admin.login = settings.ADMIN_LOGIN
+            admin.password_hash = get_password_hash(settings.ADMIN_PASSWORD)
+            db.commit()
+            logger.info("Admin credentials synced from environment")
 
         # Initialize settings
         init_settings(db)
