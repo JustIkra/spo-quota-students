@@ -2,7 +2,7 @@
 Pydantic schemas for SpecialtyTemplate model (global catalog).
 """
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 from pydantic import BaseModel, Field
 
@@ -36,3 +36,4 @@ class SpecialtyTemplateResponse(SpecialtyTemplateBase):
 class SpecialtyTemplateWithUsage(SpecialtyTemplateResponse):
     """Schema for specialty template with usage count."""
     spo_count: int = 0  # Number of SPOs using this template
+    spo_names: List[str] = []  # Names of SPOs using this template

@@ -210,22 +210,22 @@ async function deleteSpecialty() {
 
 <template>
   <div class="specialty-assignment">
-    <div class="page-header">
-      <h1 class="page-title">Направления учреждений</h1>
-      <div class="header-actions">
+    <h1 class="page-title">Направления учреждений</h1>
+
+    <div class="toolbar">
+      <div class="filters">
+        <AppSelect
+          v-model="selectedSpoId"
+          label="Фильтр по учреждению"
+          :options="spoOptions"
+        />
+      </div>
+      <div class="toolbar-actions">
         <AppButton variant="secondary" @click="showSettingsModal = true">
           Базовая квота: {{ settings.base_quota }}
         </AppButton>
         <AppButton @click="openAssignModal">Прикрепить направление</AppButton>
       </div>
-    </div>
-
-    <div class="filters">
-      <AppSelect
-        v-model="selectedSpoId"
-        label="Фильтр по учреждению"
-        :options="spoOptions"
-      />
     </div>
 
     <AppTable
@@ -373,28 +373,28 @@ async function deleteSpecialty() {
 </template>
 
 <style scoped>
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
-}
-
-.header-actions {
-  display: flex;
-  gap: 12px;
-}
-
 .page-title {
   font-size: 28px;
   font-weight: 600;
   color: #111827;
-  margin: 0;
+  margin-bottom: 24px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
 .filters {
-  margin-bottom: 24px;
   max-width: 300px;
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 12px;
+  margin-left: auto;
 }
 
 .actions {
@@ -438,30 +438,28 @@ async function deleteSpecialty() {
 
 /* Mobile: 480px - 767px */
 @media (max-width: 767px) {
-  .page-header {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 12px;
-  }
-
   .page-title {
     font-size: 22px;
     word-break: break-word;
   }
 
-  .header-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .header-actions > * {
-    flex: 1;
-    min-width: 0;
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .filters {
     max-width: none;
+  }
+
+  .toolbar-actions {
+    flex-wrap: wrap;
+    margin-left: 0;
+  }
+
+  .toolbar-actions > * {
+    flex: 1;
+    min-width: 0;
   }
 
   .actions {

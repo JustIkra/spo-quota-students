@@ -72,7 +72,7 @@ onMounted(async () => {
 
 <style scoped>
 .dashboard {
-  max-width: 900px;
+  max-width: 100%;
 }
 
 .page-title {
@@ -90,7 +90,7 @@ onMounted(async () => {
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 20px;
   margin-bottom: 40px;
 }
@@ -131,7 +131,7 @@ onMounted(async () => {
 
 .links-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   gap: 12px;
 }
 

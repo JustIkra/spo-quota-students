@@ -372,39 +372,33 @@ def list_specialty_templates(
     """
     Get list of all specialty templates with usage count.
     """
-    # Subquery: count SPOs using each template
-    usage_subq = (
-        db.query(
-            Specialty.template_id,
-            func.count(func.distinct(Specialty.spo_id)).label("spo_count")
-        )
-        .filter(Specialty.template_id.isnot(None))
-        .group_by(Specialty.template_id)
-        .subquery()
-    )
+    # Get all templates
+    templates = db.query(SpecialtyTemplate).order_by(SpecialtyTemplate.code).all()
 
-    result = (
-        db.query(
-            SpecialtyTemplate.id,
-            SpecialtyTemplate.code,
-            SpecialtyTemplate.name,
-            SpecialtyTemplate.created_at,
-            func.coalesce(usage_subq.c.spo_count, 0).label("spo_count")
-        )
-        .outerjoin(usage_subq, SpecialtyTemplate.id == usage_subq.c.template_id)
-        .order_by(SpecialtyTemplate.code)
+    # Get SPO names grouped by template_id
+    spo_by_template = (
+        db.query(Specialty.template_id, SPO.name)
+        .join(SPO, Specialty.spo_id == SPO.id)
+        .filter(Specialty.template_id.isnot(None))
+        .distinct()
         .all()
     )
 
+    # Build mapping: template_id -> list of SPO names
+    spo_names_map = {}
+    for template_id, spo_name in spo_by_template:
+        spo_names_map.setdefault(template_id, []).append(spo_name)
+
     return [
         SpecialtyTemplateWithUsage(
-            id=row.id,
-            code=row.code,
-            name=row.name,
-            created_at=row.created_at,
-            spo_count=row.spo_count
+            id=t.id,
+            code=t.code,
+            name=t.name,
+            created_at=t.created_at,
+            spo_count=len(spo_names_map.get(t.id, [])),
+            spo_names=sorted(spo_names_map.get(t.id, []))
         )
-        for row in result
+        for t in templates
     ]
 
 
