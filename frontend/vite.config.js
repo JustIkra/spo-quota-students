@@ -6,7 +6,7 @@ export default defineConfig({
   server: {
     port: 3000,
     host: '0.0.0.0',
-    allowedHosts: true,
+    allowedHosts: ['quota.labs-edu.ru', 'quota-dev.empty-lab.ru'],
     proxy: {
       '/api': {
         target: process.env.API_URL || 'http://backend:8000',
