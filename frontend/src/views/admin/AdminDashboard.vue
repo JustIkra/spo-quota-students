@@ -3,22 +3,25 @@ import { ref, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import { adminApi } from '../../api/admin'
 import { statsApi } from '../../api/stats'
+import DashboardChart from '../../components/DashboardChart.vue'
 
 const spoCount = ref(0)
 const operatorCount = ref(0)
 const studentCount = ref(0)
+const stats = ref(null)
 const loading = ref(true)
 
 onMounted(async () => {
   try {
-    const [spoList, operators, stats] = await Promise.all([
+    const [spoList, operators, statsData] = await Promise.all([
       adminApi.getSpoList(),
       adminApi.getOperators(),
       statsApi.getStats()
     ])
     spoCount.value = spoList.length
     operatorCount.value = operators.length
-    studentCount.value = stats.reduce((sum, item) => sum + item.enrolled, 0)
+    studentCount.value = statsData.total_students
+    stats.value = statsData
   } catch (error) {
     console.error('Ошибка загрузки данных:', error)
   } finally {
@@ -67,6 +70,11 @@ onMounted(async () => {
         </RouterLink>
       </div>
     </div>
+
+    <DashboardChart
+      v-if="!loading && stats && stats.spo_list && stats.spo_list.length > 0"
+      :spo-list="stats.spo_list"
+    />
   </div>
 </template>
 
