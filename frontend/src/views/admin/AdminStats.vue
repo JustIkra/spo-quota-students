@@ -289,7 +289,7 @@ function getAvailableSlots(spo) {
   border-radius: 12px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   padding: 24px;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 
 .summary-header {

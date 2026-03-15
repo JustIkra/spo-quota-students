@@ -32,6 +32,7 @@ logs/
 
 # Docker
 postgres_data/
+docker-compose.override.yml
 
 .claude
 CLAUDE.md

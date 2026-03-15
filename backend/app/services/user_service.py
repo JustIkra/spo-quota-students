@@ -5,13 +5,14 @@ import secrets
 import string
 from typing import Optional
 
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import User, UserRole
 from app.core.security import get_password_hash, verify_password
 
 
-def generate_login(spo_name: str, db: Session) -> str:
+async def generate_login(spo_name: str, db: AsyncSession) -> str:
     """Generate unique login for operator based on SPO name."""
     # Transliterate and clean SPO name
     transliteration = {
@@ -38,7 +39,10 @@ def generate_login(spo_name: str, db: Session) -> str:
     # Check uniqueness and add suffix if needed
     login = base_login
     counter = 1
-    while db.query(User).filter(User.login == login).first():
+    while True:
+        result = await db.execute(select(User).where(User.login == login))
+        if result.scalars().first() is None:
+            break
         login = f"{base_login}_{counter}"
         counter += 1
 
@@ -59,9 +63,9 @@ def generate_password(length: int = 12) -> str:
     return ''.join(password)
 
 
-def create_operator(db: Session, spo_id: int, spo_name: str) -> tuple[User, str]:
+async def create_operator(db: AsyncSession, spo_id: int, spo_name: str) -> tuple[User, str]:
     """Create operator for SPO with generated credentials."""
-    login = generate_login(spo_name, db)
+    login = await generate_login(spo_name, db)
     password = generate_password()
 
     user = User(
@@ -71,29 +75,31 @@ def create_operator(db: Session, spo_id: int, spo_name: str) -> tuple[User, str]
         spo_id=spo_id
     )
     db.add(user)
-    db.commit()
-    db.refresh(user)
+    await db.commit()
+    await db.refresh(user)
 
     return user, password
 
 
-def reset_password(db: Session, user_id: int) -> tuple[User, str]:
+async def reset_password(db: AsyncSession, user_id: int) -> tuple[User, str]:
     """Reset password for user, returning user and new password."""
-    user = db.query(User).filter(User.id == user_id).first()
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalars().first()
     if not user:
         raise ValueError("User not found")
 
     password = generate_password()
     user.password_hash = get_password_hash(password)
-    db.commit()
-    db.refresh(user)
+    await db.commit()
+    await db.refresh(user)
 
     return user, password
 
 
-def authenticate_user(db: Session, login: str, password: str) -> Optional[User]:
+async def authenticate_user(db: AsyncSession, login: str, password: str) -> Optional[User]:
     """Authenticate user by login and password."""
-    user = db.query(User).filter(User.login == login).first()
+    result = await db.execute(select(User).where(User.login == login))
+    user = result.scalars().first()
     if not user:
         return None
     if not verify_password(password, user.password_hash):
@@ -101,11 +107,13 @@ def authenticate_user(db: Session, login: str, password: str) -> Optional[User]:
     return user
 
 
-def get_user_by_id(db: Session, user_id: int) -> Optional[User]:
+async def get_user_by_id(db: AsyncSession, user_id: int) -> Optional[User]:
     """Get user by ID."""
-    return db.query(User).filter(User.id == user_id).first()
+    result = await db.execute(select(User).where(User.id == user_id))
+    return result.scalars().first()
 
 
-def get_user_by_login(db: Session, login: str) -> Optional[User]:
+async def get_user_by_login(db: AsyncSession, login: str) -> Optional[User]:
     """Get user by login."""
-    return db.query(User).filter(User.login == login).first()
+    result = await db.execute(select(User).where(User.login == login))
+    return result.scalars().first()

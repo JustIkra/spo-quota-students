@@ -1,36 +1,40 @@
 """
 Settings service - business logic for application settings.
 """
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Settings
 from app.core.config import settings as app_settings
 
 
-def get_base_quota(db: Session) -> int:
+async def get_base_quota(db: AsyncSession) -> int:
     """Get base quota from database settings."""
-    setting = db.query(Settings).filter(Settings.key == "base_quota").first()
+    result = await db.execute(select(Settings).where(Settings.key == "base_quota"))
+    setting = result.scalars().first()
     if setting:
         return int(setting.value)
     return app_settings.DEFAULT_BASE_QUOTA
 
 
-def set_base_quota(db: Session, value: int) -> int:
+async def set_base_quota(db: AsyncSession, value: int) -> int:
     """Set base quota in database settings."""
-    setting = db.query(Settings).filter(Settings.key == "base_quota").first()
+    result = await db.execute(select(Settings).where(Settings.key == "base_quota"))
+    setting = result.scalars().first()
     if setting:
         setting.value = str(value)
     else:
         setting = Settings(key="base_quota", value=str(value))
         db.add(setting)
-    db.commit()
+    await db.commit()
     return value
 
 
-def init_settings(db: Session) -> None:
+async def init_settings(db: AsyncSession) -> None:
     """Initialize default settings if not exist."""
-    existing = db.query(Settings).filter(Settings.key == "base_quota").first()
+    result = await db.execute(select(Settings).where(Settings.key == "base_quota"))
+    existing = result.scalars().first()
     if not existing:
         setting = Settings(key="base_quota", value=str(app_settings.DEFAULT_BASE_QUOTA))
         db.add(setting)
-        db.commit()
+        await db.commit()

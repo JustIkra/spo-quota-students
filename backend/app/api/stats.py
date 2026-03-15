@@ -4,20 +4,22 @@ Statistics API endpoints.
 from typing import List
 
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func
+from sqlalchemy import select, func
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db, get_current_user
 from app.models import User, UserRole, SPO, Specialty, Student
 from app.schemas import SpecialtyStats, SPOStats, OverallStats
+from app.core.cache import cached, invalidate
 
 
 router = APIRouter(prefix="/api", tags=["Statistics"])
 
 
 @router.get("/stats", response_model=OverallStats)
-def get_stats(
-    db: Session = Depends(get_db),
+@cached("stats", ttl=300)
+async def get_stats(
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -32,7 +34,7 @@ def get_stats(
 
     # Subquery: count students per specialty
     students_per_specialty = (
-        db.query(
+        select(
             Student.specialty_id,
             func.count(Student.id).label("students_count")
         )
@@ -41,8 +43,8 @@ def get_stats(
     )
 
     # Main query: get specialties with student counts in a single query
-    specialties_with_counts = (
-        db.query(
+    stmt = (
+        select(
             Specialty.id,
             Specialty.spo_id,
             Specialty.name,
@@ -53,9 +55,10 @@ def get_stats(
         )
         .join(SPO, Specialty.spo_id == SPO.id)
         .outerjoin(students_per_specialty, Specialty.id == students_per_specialty.c.specialty_id)
-        .filter(spo_filter)
-        .all()
+        .where(spo_filter)
     )
+    result = await db.execute(stmt)
+    specialties_with_counts = result.all()
 
     # Group by SPO
     spo_data: dict = {}
@@ -88,10 +91,11 @@ def get_stats(
 
     # Also include SPOs without specialties
     if current_user.role == UserRole.ADMIN:
-        all_spo = db.query(SPO).all()
+        spo_result = await db.execute(select(SPO))
     else:
-        all_spo = db.query(SPO).filter(SPO.id == current_user.spo_id).all()
+        spo_result = await db.execute(select(SPO).where(SPO.id == current_user.spo_id))
 
+    all_spo = spo_result.scalars().all()
     for spo in all_spo:
         if spo.id not in spo_data:
             spo_data[spo.id] = {

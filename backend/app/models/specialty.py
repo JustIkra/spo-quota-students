@@ -1,9 +1,11 @@
 """
 Specialty model for educational programs assigned to SPO.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, UniqueConstraint
+
+MSK = timezone(timedelta(hours=3))
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -20,7 +22,7 @@ class Specialty(Base):
     name = Column(String(255), nullable=False)
     code = Column(String(50), nullable=True)
     quota = Column(Integer, nullable=False, default=25)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(MSK).replace(tzinfo=None), nullable=False)
 
     # Unique constraint: one template can be assigned to SPO only once
     __table_args__ = (

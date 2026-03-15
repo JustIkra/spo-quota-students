@@ -31,14 +31,14 @@ async function loadData() {
 
 <template>
   <div class="specialty-list">
-    <div class="page-header">
-      <h1 class="page-title">Направления</h1>
-    </div>
+    <h1 class="page-title">Направления</h1>
 
-    <p class="info-text">
-      Управление направлениями осуществляется администратором.
-      Здесь вы можете просмотреть прикреплённые к вашему учреждению направления.
-    </p>
+    <div class="toolbar">
+      <p class="info-text">
+        Управление направлениями осуществляется администратором.
+        Здесь вы можете просмотреть прикреплённые к вашему учреждению направления.
+      </p>
+    </div>
 
     <AppTable
       :columns="columns"
@@ -51,27 +51,28 @@ async function loadData() {
 </template>
 
 <style scoped>
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-
 .page-title {
   font-size: 28px;
   font-weight: 600;
   color: #111827;
-  margin: 0;
+  margin-bottom: 24px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
 .info-text {
   color: #6b7280;
   font-size: 14px;
-  margin-bottom: 24px;
+  margin: 0;
   padding: 12px 16px;
   background: #f3f4f6;
   border-radius: 8px;
+  flex: 1;
 }
 
 .slots-full {
@@ -81,15 +82,14 @@ async function loadData() {
 
 /* Mobile: 480px - 767px */
 @media (max-width: 767px) {
-  .page-header {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 12px;
-  }
-
   .page-title {
     font-size: 22px;
     word-break: break-word;
+  }
+
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 

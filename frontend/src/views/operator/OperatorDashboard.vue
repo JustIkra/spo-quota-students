@@ -4,21 +4,24 @@ import { RouterLink } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
 import { operatorApi } from '../../api/operator'
 import { statsApi } from '../../api/stats'
+import OperatorDashboardChart from '../../components/OperatorDashboardChart.vue'
 
 const auth = useAuthStore()
 
 const specialtyCount = ref(0)
 const studentCount = ref(0)
+const specialties = ref([])
 const loading = ref(true)
 
 onMounted(async () => {
   try {
-    const [specialties, stats] = await Promise.all([
+    const [specData, stats] = await Promise.all([
       operatorApi.getSpecialties(),
       statsApi.getStats()
     ])
-    specialtyCount.value = specialties.length
-    studentCount.value = stats.reduce((sum, item) => sum + item.enrolled, 0)
+    specialties.value = specData
+    specialtyCount.value = specData.length
+    studentCount.value = stats.total_students || 0
   } catch (error) {
     console.error('Ошибка загрузки данных:', error)
   } finally {
@@ -62,12 +65,17 @@ onMounted(async () => {
         </RouterLink>
       </div>
     </div>
+
+    <OperatorDashboardChart
+      v-if="!loading && specialties.length > 0"
+      :specialties="specialties"
+    />
   </div>
 </template>
 
 <style scoped>
 .dashboard {
-  max-width: 900px;
+  max-width: 100%;
 }
 
 .page-title {
@@ -90,7 +98,7 @@ onMounted(async () => {
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
   gap: 20px;
   margin-bottom: 40px;
 }
@@ -131,7 +139,7 @@ onMounted(async () => {
 
 .links-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 12px;
 }
 

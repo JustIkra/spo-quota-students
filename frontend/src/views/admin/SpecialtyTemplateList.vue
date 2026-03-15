@@ -113,15 +113,15 @@ async function deleteTemplate() {
 
 <template>
   <div class="specialty-template-list">
-    <div class="page-header">
-      <h1 class="page-title">Справочник направлений</h1>
+    <h1 class="page-title">Справочник направлений</h1>
+
+    <div class="toolbar">
+      <p class="info-text">
+        Глобальный справочник направлений.
+        Отсюда администратор прикрепляет направления к учреждениям.
+      </p>
       <AppButton @click="openCreateForm">Добавить в справочник</AppButton>
     </div>
-
-    <p class="info-text">
-      Глобальный справочник направлений.
-      Отсюда администратор прикрепляет направления к учреждениям.
-    </p>
 
     <AppTable
       :columns="columns"
@@ -130,8 +130,13 @@ async function deleteTemplate() {
       empty-text="Справочник пуст"
     >
       <template #spo_count="{ row }">
-        <span class="usage-badge" :class="{ 'in-use': row.spo_count > 0 }">
-          {{ row.spo_count }}
+        <span class="usage-badge-wrapper">
+          <span class="usage-badge" :class="{ 'in-use': row.spo_count > 0 }">
+            {{ row.spo_count }}
+          </span>
+          <span v-if="row.spo_names && row.spo_names.length > 0" class="tooltip">
+            <span v-for="(name, i) in row.spo_names" :key="i" class="tooltip-item">{{ name }}</span>
+          </span>
         </span>
       </template>
       <template #actions="{ row }">
@@ -204,27 +209,28 @@ async function deleteTemplate() {
 </template>
 
 <style scoped>
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-
 .page-title {
   font-size: 28px;
   font-weight: 600;
   color: #111827;
-  margin: 0;
+  margin-bottom: 24px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
 .info-text {
   color: #6b7280;
   font-size: 14px;
-  margin-bottom: 24px;
+  margin: 0;
   padding: 12px 16px;
   background: #f3f4f6;
   border-radius: 8px;
+  flex: 1;
 }
 
 .actions {
@@ -247,6 +253,48 @@ async function deleteTemplate() {
   color: #2563eb;
 }
 
+.usage-badge-wrapper {
+  position: relative;
+  display: inline-block;
+  cursor: default;
+}
+
+.tooltip {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1f2937;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  white-space: nowrap;
+  z-index: 50;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: #1f2937;
+}
+
+.usage-badge-wrapper:hover .tooltip {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tooltip-item {
+  line-height: 1.4;
+}
+
 .form {
   display: flex;
   flex-direction: column;
@@ -261,15 +309,14 @@ async function deleteTemplate() {
 
 /* Mobile: 480px - 767px */
 @media (max-width: 767px) {
-  .page-header {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 12px;
-  }
-
   .page-title {
     font-size: 22px;
     word-break: break-word;
+  }
+
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .actions {
