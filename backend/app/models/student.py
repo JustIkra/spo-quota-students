@@ -1,9 +1,11 @@
 """
 Student model for enrolled students.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+
+MSK = timezone(timedelta(hours=3))
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -19,7 +21,7 @@ class Student(Base):
     last_name = Column(String(100), nullable=False)
     middle_name = Column(String(100), nullable=True)
     certificate_number = Column(String(50), unique=True, nullable=False, index=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(MSK).replace(tzinfo=None), nullable=False)
 
     # Relationships
     specialty = relationship("Specialty", back_populates="students")

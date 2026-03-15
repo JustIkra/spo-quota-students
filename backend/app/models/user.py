@@ -1,13 +1,15 @@
 """
 User model for authentication and authorization.
 """
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from enum import Enum as PyEnum
 
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Enum, Index
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
+
+MSK = timezone(timedelta(hours=3))
 
 
 class UserRole(str, PyEnum):
@@ -25,7 +27,7 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     role = Column(Enum(UserRole), nullable=False, default=UserRole.OPERATOR)
     spo_id = Column(Integer, ForeignKey("spo.id", ondelete="SET NULL"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(MSK).replace(tzinfo=None), nullable=False)
 
     # Unique constraint: only one operator per SPO (partial index for operators only)
     # Note: PostgreSQL supports partial unique indexes, for SQLite we'll use application-level check

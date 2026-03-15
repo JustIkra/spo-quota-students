@@ -139,18 +139,20 @@ async function deleteStudent() {
 
 <template>
   <div class="student-list">
-    <div class="page-header">
-      <h1 class="page-title">Студенты</h1>
-      <AppButton @click="openCreate">Добавить студента</AppButton>
-    </div>
+    <h1 class="page-title">Студенты</h1>
 
-    <div class="filters">
-      <AppSelect
-        v-model="selectedSpecialty"
-        :options="specialtyOptions.slice(1)"
-        placeholder="Все направления"
-        label="Фильтр по направления"
-      />
+    <div class="toolbar">
+      <div class="filters">
+        <AppSelect
+          v-model="selectedSpecialty"
+          :options="specialtyOptions.slice(1)"
+          placeholder="Все направления"
+          label="Фильтр по направления"
+        />
+      </div>
+      <div class="toolbar-actions">
+        <AppButton @click="openCreate">Добавить студента</AppButton>
+      </div>
     </div>
 
     <AppTable
@@ -202,23 +204,28 @@ async function deleteStudent() {
 </template>
 
 <style scoped>
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
-}
-
 .page-title {
   font-size: 28px;
   font-weight: 600;
   color: #111827;
-  margin: 0;
+  margin-bottom: 24px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
 .filters {
-  margin-bottom: 20px;
   max-width: 300px;
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 12px;
+  margin-left: auto;
 }
 
 .action-buttons {
@@ -228,19 +235,28 @@ async function deleteStudent() {
 
 /* Mobile: 480px - 767px */
 @media (max-width: 767px) {
-  .page-header {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 12px;
-  }
-
   .page-title {
     font-size: 22px;
     word-break: break-word;
   }
 
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
   .filters {
     max-width: none;
+  }
+
+  .toolbar-actions {
+    flex-wrap: wrap;
+    margin-left: 0;
+  }
+
+  .toolbar-actions > * {
+    flex: 1;
+    min-width: 0;
   }
 
   .action-buttons {
