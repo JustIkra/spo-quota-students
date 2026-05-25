@@ -168,7 +168,6 @@ function downloadBulkDocx() {
 function downloadSingleDocx() {
   downloadDocx(
     [{
-      spo_id: 0,
       spo_name: createdSpoName.value || '-',
       login: createdLogin.value,
       password: generatedPassword.value,

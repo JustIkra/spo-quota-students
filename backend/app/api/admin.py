@@ -1,6 +1,7 @@
 """
 Admin API endpoints - SPO, operators, specialty templates, settings management.
 """
+import logging
 from datetime import datetime
 from io import BytesIO
 from typing import List
@@ -25,6 +26,9 @@ from app.schemas import (
 from app.services import create_operator, reset_password, get_base_quota, set_base_quota
 from app.services.docx_export import build_credentials_docx
 from app.core.cache import cached, invalidate
+
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
@@ -295,8 +299,14 @@ async def create_operators_bulk(
     spo_without_operator = result.scalars().all()
 
     created: list[OperatorCredential] = []
+    skipped_spo_ids: list[int] = []
     for spo in spo_without_operator:
-        user, password = await create_operator(db, spo.id, spo.name)
+        try:
+            user, password = await create_operator(db, spo.id, spo.name)
+        except Exception:
+            logger.exception("Bulk operator creation failed for SPO id=%s", spo.id)
+            skipped_spo_ids.append(spo.id)
+            continue
         created.append(OperatorCredential(
             spo_id=spo.id,
             spo_name=spo.name,
@@ -306,8 +316,12 @@ async def create_operators_bulk(
 
     if created:
         await invalidate("admin:spo")
+        logger.info(
+            "Bulk-created %d operators by admin id=%s (skipped=%d)",
+            len(created), current_user.id, len(skipped_spo_ids),
+        )
 
-    return BulkOperatorCreateResponse(created=created, skipped_spo_ids=[])
+    return BulkOperatorCreateResponse(created=created, skipped_spo_ids=skipped_spo_ids)
 
 
 @router.post("/operators/export-docx")

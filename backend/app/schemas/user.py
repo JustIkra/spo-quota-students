@@ -43,10 +43,10 @@ class UserWithPassword(UserResponse):
 
 class OperatorCredential(BaseModel):
     """Single created operator credential with SPO name."""
-    spo_id: int
-    spo_name: str
-    login: str
-    password: str
+    spo_id: Optional[int] = None
+    spo_name: str = Field(..., max_length=500)
+    login: str = Field(..., max_length=100)
+    password: str = Field(..., max_length=100)
 
 
 class BulkOperatorCreateResponse(BaseModel):
@@ -57,7 +57,7 @@ class BulkOperatorCreateResponse(BaseModel):
 
 class DocxExportRequest(BaseModel):
     """Payload for exporting a list of credentials to .docx."""
-    items: list[OperatorCredential] = Field(..., min_length=1)
+    items: list[OperatorCredential] = Field(..., min_length=1, max_length=500)
 
 
 class TokenResponse(BaseModel):
