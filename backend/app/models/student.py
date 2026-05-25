@@ -4,11 +4,11 @@ Student model for enrolled students.
 from datetime import datetime, timezone, timedelta
 
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
-
-MSK = timezone(timedelta(hours=3))
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
+
+MSK = timezone(timedelta(hours=3))
 
 
 class Student(Base):
@@ -24,7 +24,7 @@ class Student(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(MSK).replace(tzinfo=None), nullable=False)
 
     # Relationships
-    specialty = relationship("Specialty", back_populates="students")
+    specialty = relationship("Specialty", back_populates="students", lazy="raise")
 
     @property
     def full_name(self) -> str:

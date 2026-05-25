@@ -41,6 +41,25 @@ class UserWithPassword(UserResponse):
     generated_password: str
 
 
+class OperatorCredential(BaseModel):
+    """Single created operator credential with SPO name."""
+    spo_id: Optional[int] = None
+    spo_name: str = Field(..., max_length=500)
+    login: str = Field(..., max_length=100)
+    password: str = Field(..., max_length=100)
+
+
+class BulkOperatorCreateResponse(BaseModel):
+    """Response for bulk operator creation."""
+    created: list[OperatorCredential]
+    skipped_spo_ids: list[int] = Field(default_factory=list)
+
+
+class DocxExportRequest(BaseModel):
+    """Payload for exporting a list of credentials to .docx."""
+    items: list[OperatorCredential] = Field(..., min_length=1, max_length=500)
+
+
 class TokenResponse(BaseModel):
     """Schema for JWT token response."""
     access_token: str

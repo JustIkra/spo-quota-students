@@ -7,6 +7,7 @@ import logging
 from typing import Optional
 
 import redis.asyncio as aioredis
+from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 
@@ -45,9 +46,8 @@ def cached(prefix: str, ttl: int = 300):
     """
     Caching decorator for async endpoint functions.
 
-    Builds cache key from prefix + relevant request params.
-    The decorated function must be a FastAPI endpoint (kwargs contain
-    query params, path params, current_user, db, etc.).
+    On cache hit, returns a JSONResponse with pre-serialized JSON
+    to avoid double serialization (serialize→cache→deserialize→re-serialize).
 
     Args:
         prefix: Cache key prefix (e.g. "admin:spo", "stats")
@@ -82,24 +82,23 @@ def cached(prefix: str, ttl: int = 300):
             try:
                 cached_data = await r.get(cache_key)
                 if cached_data is not None:
-                    return json.loads(cached_data)
+                    return JSONResponse(content=json.loads(cached_data))
             except Exception as e:
                 logger.warning(f"Cache read error: {e}")
 
             result = await func(*args, **kwargs)
 
             try:
-                # Serialize: handle Pydantic models, datetime, etc.
                 if isinstance(result, list):
-                    serialized = json.dumps(
-                        [item.model_dump() if hasattr(item, "model_dump") else item for item in result],
-                        default=str
-                    )
+                    payload = [
+                        item.model_dump(mode="json") if hasattr(item, "model_dump") else item
+                        for item in result
+                    ]
                 elif hasattr(result, "model_dump"):
-                    serialized = json.dumps(result.model_dump(), default=str)
+                    payload = result.model_dump(mode="json")
                 else:
-                    serialized = json.dumps(result, default=str)
-                await r.set(cache_key, serialized, ex=ttl)
+                    payload = result
+                await r.set(cache_key, json.dumps(payload), ex=ttl)
             except Exception as e:
                 logger.warning(f"Cache write error: {e}")
 

@@ -6,8 +6,6 @@ from time import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
-
 from app.api.deps import get_db, get_current_user
 from app.models import User
 from app.schemas import UserLogin, TokenResponse, CurrentUser
@@ -24,13 +22,29 @@ _MAX_LOGIN_ATTEMPTS = 5
 _LOGIN_WINDOW_SECONDS = 60
 
 
+_RATE_LIMIT_DICT_MAX_SIZE = 10_000
+
+
+def _evict_stale_entries(now: float) -> None:
+    """Drop IPs with no recent attempts. Called when the dict grows too large."""
+    stale = [
+        ip for ip, attempts in _login_attempts.items()
+        if not attempts or now - attempts[-1] >= _LOGIN_WINDOW_SECONDS
+    ]
+    for ip in stale:
+        del _login_attempts[ip]
+
+
 def _check_login_rate_limit(ip: str) -> None:
     """
     Check if the IP has exceeded the login rate limit.
     Raises HTTPException 429 if too many attempts.
     """
     now = time()
-    # Clean up old attempts outside the window
+
+    if len(_login_attempts) > _RATE_LIMIT_DICT_MAX_SIZE:
+        _evict_stale_entries(now)
+
     _login_attempts[ip] = [
         t for t in _login_attempts[ip] if now - t < _LOGIN_WINDOW_SECONDS
     ]
@@ -48,10 +62,9 @@ async def login(user_data: UserLogin, request: Request, db: AsyncSession = Depen
     Authenticate user and return JWT token.
     Rate limited to 5 attempts per minute per IP.
     """
-    # Get client IP (check X-Forwarded-For header for proxy setups)
-    client_ip = request.headers.get("X-Forwarded-For", request.client.host)
+    direct_host = request.client.host if request.client else "unknown"
+    client_ip = request.headers.get("X-Forwarded-For", direct_host)
     if client_ip and "," in client_ip:
-        # Take the first IP if multiple are present
         client_ip = client_ip.split(",")[0].strip()
 
     _check_login_rate_limit(client_ip)

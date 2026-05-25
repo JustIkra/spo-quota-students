@@ -30,19 +30,30 @@ async def list_specialties(
     Get list of specialties assigned to operator's SPO (read-only).
     Specialty management is done by admin.
     """
-    result = await db.execute(
-        select(Specialty).where(Specialty.spo_id == current_user.spo_id)
-    )
-    specialties = result.scalars().all()
-
-    items = []
-    for specialty in specialties:
-        count_result = await db.execute(
-            select(func.count(Student.id)).where(Student.specialty_id == specialty.id)
+    # Single query with student count via LEFT JOIN + GROUP BY
+    students_count_subq = (
+        select(
+            Student.specialty_id,
+            func.count(Student.id).label("students_count")
         )
-        students_count = count_result.scalar()
+        .group_by(Student.specialty_id)
+        .subquery()
+    )
 
-        items.append(SpecialtyWithStats(
+    stmt = (
+        select(
+            Specialty,
+            func.coalesce(students_count_subq.c.students_count, 0).label("students_count")
+        )
+        .outerjoin(students_count_subq, Specialty.id == students_count_subq.c.specialty_id)
+        .where(Specialty.spo_id == current_user.spo_id)
+    )
+
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    return [
+        SpecialtyWithStats(
             id=specialty.id,
             spo_id=specialty.spo_id,
             template_id=specialty.template_id,
@@ -52,9 +63,9 @@ async def list_specialties(
             created_at=specialty.created_at,
             students_count=students_count,
             available_slots=max(0, specialty.quota - students_count)
-        ))
-
-    return items
+        )
+        for specialty, students_count in rows
+    ]
 
 
 # ==================== Students Management ====================
@@ -73,10 +84,13 @@ async def list_students(
     Supports pagination with skip/limit parameters.
     Optional filter by specialty_id.
     """
-    # Get all specialties of operator's SPO
-    spo_specialty_ids = select(Specialty.id).where(Specialty.spo_id == current_user.spo_id)
-
-    stmt = select(Student).where(Student.specialty_id.in_(spo_specialty_ids))
+    # Base query with JOINs — single query instead of N+1
+    stmt = (
+        select(Student, Specialty.name.label("specialty_name"), SPO.name.label("spo_name"))
+        .join(Specialty, Student.specialty_id == Specialty.id)
+        .join(SPO, Specialty.spo_id == SPO.id)
+        .where(Specialty.spo_id == current_user.spo_id)
+    )
 
     if specialty_id is not None:
         # Verify specialty belongs to operator's SPO
@@ -86,33 +100,20 @@ async def list_students(
                 Specialty.spo_id == current_user.spo_id
             )
         )
-        specialty = spec_result.scalars().first()
-        if not specialty:
+        if not spec_result.scalars().first():
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Specialty not found or does not belong to your SPO"
             )
-        stmt = select(Student).where(Student.specialty_id == specialty_id)
+        stmt = stmt.where(Student.specialty_id == specialty_id)
 
     stmt = stmt.offset(skip).limit(limit)
 
     result = await db.execute(stmt)
-    students = result.scalars().all()
+    rows = result.all()
 
-    items = []
-    for student in students:
-        # Load specialty and SPO explicitly
-        spec_result = await db.execute(
-            select(Specialty).where(Specialty.id == student.specialty_id)
-        )
-        specialty = spec_result.scalars().first()
-
-        spo_name = None
-        if specialty:
-            spo_result = await db.execute(select(SPO.name).where(SPO.id == specialty.spo_id))
-            spo_name = spo_result.scalar()
-
-        items.append(StudentWithSpecialty(
+    return [
+        StudentWithSpecialty(
             id=student.id,
             specialty_id=student.specialty_id,
             first_name=student.first_name,
@@ -120,11 +121,11 @@ async def list_students(
             middle_name=student.middle_name,
             certificate_number=student.certificate_number,
             created_at=student.created_at,
-            specialty_name=specialty.name if specialty else None,
+            specialty_name=specialty_name,
             spo_name=spo_name
-        ))
-
-    return items
+        )
+        for student, specialty_name, spo_name in rows
+    ]
 
 
 @router.post("/students", response_model=StudentResponse, status_code=status.HTTP_201_CREATED)

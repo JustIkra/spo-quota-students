@@ -12,7 +12,7 @@ from sqlalchemy import select, text
 from app.core.config import settings
 from app.core.database import engine, Base, AsyncSessionLocal, init_db
 from app.core.cache import init_cache, close_cache
-from app.core.security import get_password_hash
+from app.core.security import get_password_hash, verify_password
 from app.models import User, UserRole, Settings
 from app.services import init_settings
 from app.api import auth_router, admin_router, operator_router, stats_router
@@ -44,10 +44,23 @@ async def create_initial_admin():
                 await db.commit()
                 logger.info(f"Admin user created with login: {settings.ADMIN_LOGIN}")
             else:
-                admin.login = settings.ADMIN_LOGIN
-                admin.password_hash = get_password_hash(settings.ADMIN_PASSWORD)
-                await db.commit()
-                logger.info("Admin credentials synced from environment")
+                changed = False
+                if admin.login != settings.ADMIN_LOGIN:
+                    admin.login = settings.ADMIN_LOGIN
+                    changed = True
+                try:
+                    password_matches = verify_password(settings.ADMIN_PASSWORD, admin.password_hash)
+                except Exception as exc:
+                    logger.warning(f"Admin password hash unreadable, will rehash: {exc}")
+                    password_matches = False
+                if not password_matches:
+                    admin.password_hash = get_password_hash(settings.ADMIN_PASSWORD)
+                    changed = True
+                if changed:
+                    await db.commit()
+                    logger.info("Admin credentials synced from environment")
+                else:
+                    logger.info("Admin credentials unchanged")
 
             # Initialize settings
             await init_settings(db)
