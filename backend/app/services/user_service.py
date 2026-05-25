@@ -1,6 +1,7 @@
 """
 User service - business logic for user operations.
 """
+import re
 import secrets
 import string
 from typing import Optional
@@ -12,9 +13,16 @@ from app.models import User, UserRole
 from app.core.security import get_password_hash, verify_password
 
 
+def _extract_meaningful_part(spo_name: str) -> str:
+    """Pick the distinguishing tail of the SPO name (text inside quotes if present)."""
+    match = re.search(r'[«"„"\'`]([^«»"„"\'`]+)[»"""\'`]', spo_name)
+    if match:
+        return match.group(1)
+    return spo_name
+
+
 async def generate_login(spo_name: str, db: AsyncSession) -> str:
     """Generate unique login for operator based on SPO name."""
-    # Transliterate and clean SPO name
     transliteration = {
         'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'e',
         'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm',
@@ -24,27 +32,39 @@ async def generate_login(spo_name: str, db: AsyncSession) -> str:
         ' ': '_', '-': '_'
     }
 
+    source = _extract_meaningful_part(spo_name)
+
     base_login = ""
-    for char in spo_name.lower():
+    for char in source.lower():
         if char in transliteration:
             base_login += transliteration[char]
         elif char.isalnum():
             base_login += char
 
-    # Limit length and clean up
-    base_login = base_login[:20].strip('_')
+    base_login = re.sub(r'_+', '_', base_login).strip('_')
+
+    if len(base_login) > 30:
+        truncated = base_login[:30]
+        last_sep = truncated.rfind('_')
+        if last_sep >= 10:
+            truncated = truncated[:last_sep]
+        base_login = truncated.strip('_')
+
     if not base_login:
         base_login = "operator"
 
     # Check uniqueness and add suffix if needed
     login = base_login
     counter = 1
+    max_attempts = 100
     while True:
         result = await db.execute(select(User).where(User.login == login))
         if result.scalars().first() is None:
             break
         login = f"{base_login}_{counter}"
         counter += 1
+        if counter > max_attempts:
+            raise RuntimeError(f"Could not generate unique login after {max_attempts} attempts")
 
     return login
 

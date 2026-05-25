@@ -1,9 +1,14 @@
 """
 Admin API endpoints - SPO, operators, specialty templates, settings management.
 """
+from datetime import datetime
+from io import BytesIO
 from typing import List
+from urllib.parse import quote
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select, func, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,11 +17,13 @@ from app.models import User, UserRole, SPO, SpecialtyTemplate, Specialty, Studen
 from app.schemas import (
     SPOCreate, SPOUpdate, SPOResponse, SPOWithStats,
     UserCreate, UserResponse, UserWithPassword,
+    OperatorCredential, BulkOperatorCreateResponse, DocxExportRequest,
     SpecialtyTemplateCreate, SpecialtyTemplateUpdate, SpecialtyTemplateResponse, SpecialtyTemplateWithUsage,
     SpecialtyAssign, QuotaUpdate, SpecialtyResponse, SpecialtyWithStats,
     SettingsResponse, SettingsUpdate
 )
 from app.services import create_operator, reset_password, get_base_quota, set_base_quota
+from app.services.docx_export import build_credentials_docx
 from app.core.cache import cached, invalidate
 
 
@@ -265,6 +272,62 @@ async def create_operator_endpoint(
         spo_id=user.spo_id,
         created_at=user.created_at,
         generated_password=password
+    )
+
+
+@router.post("/operators/bulk", response_model=BulkOperatorCreateResponse, status_code=status.HTTP_201_CREATED)
+async def create_operators_bulk(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin)
+):
+    """
+    Create operator accounts for every SPO that doesn't yet have one.
+    Returns the list of newly created credentials.
+    """
+    operators_subq = (
+        select(User.spo_id)
+        .where(User.role == UserRole.OPERATOR, User.spo_id.isnot(None))
+        .subquery()
+    )
+    result = await db.execute(
+        select(SPO).where(SPO.id.notin_(select(operators_subq.c.spo_id))).order_by(SPO.name)
+    )
+    spo_without_operator = result.scalars().all()
+
+    created: list[OperatorCredential] = []
+    for spo in spo_without_operator:
+        user, password = await create_operator(db, spo.id, spo.name)
+        created.append(OperatorCredential(
+            spo_id=spo.id,
+            spo_name=spo.name,
+            login=user.login,
+            password=password,
+        ))
+
+    if created:
+        await invalidate("admin:spo")
+
+    return BulkOperatorCreateResponse(created=created, skipped_spo_ids=[])
+
+
+@router.post("/operators/export-docx")
+async def export_operators_docx(
+    payload: DocxExportRequest,
+    current_user: User = Depends(get_current_admin)
+):
+    """
+    Build a .docx file with provided login/password/SPO triples and return it for download.
+    """
+    buffer = build_credentials_docx(payload.items)
+    timestamp = datetime.now(ZoneInfo("Europe/Moscow")).strftime("%Y%m%d_%H%M")
+    filename = f"operatory_{timestamp}.docx"
+    headers = {
+        "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"
+    }
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers=headers,
     )
 
 
@@ -540,25 +603,33 @@ async def list_all_specialties(
     Get list of all assigned specialties with stats.
     Optionally filter by spo_id.
     """
-    stmt = select(Specialty)
+    # Single query with JOINs instead of N+1
+    students_count_subq = (
+        select(
+            Student.specialty_id,
+            func.count(Student.id).label("students_count")
+        )
+        .group_by(Student.specialty_id)
+        .subquery()
+    )
+
+    stmt = (
+        select(
+            Specialty,
+            func.coalesce(students_count_subq.c.students_count, 0).label("students_count"),
+            SPO.name.label("spo_name")
+        )
+        .join(SPO, Specialty.spo_id == SPO.id)
+        .outerjoin(students_count_subq, Specialty.id == students_count_subq.c.specialty_id)
+    )
     if spo_id is not None:
         stmt = stmt.where(Specialty.spo_id == spo_id)
 
     result = await db.execute(stmt)
-    specialties = result.scalars().all()
+    rows = result.all()
 
-    items = []
-    for specialty in specialties:
-        count_result = await db.execute(
-            select(func.count(Student.id)).where(Student.specialty_id == specialty.id)
-        )
-        students_count = count_result.scalar()
-
-        # Load SPO name explicitly to avoid lazy loading
-        spo_result = await db.execute(select(SPO.name).where(SPO.id == specialty.spo_id))
-        spo_name = spo_result.scalar()
-
-        items.append(SpecialtyWithStats(
+    return [
+        SpecialtyWithStats(
             id=specialty.id,
             spo_id=specialty.spo_id,
             template_id=specialty.template_id,
@@ -569,9 +640,9 @@ async def list_all_specialties(
             students_count=students_count,
             available_slots=max(0, specialty.quota - students_count),
             spo_name=spo_name
-        ))
-
-    return items
+        )
+        for specialty, students_count, spo_name in rows
+    ]
 
 
 @router.post("/specialties", response_model=SpecialtyResponse, status_code=status.HTTP_201_CREATED)

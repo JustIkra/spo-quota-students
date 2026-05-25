@@ -5,6 +5,9 @@ from app.schemas.user import (
     UserLogin,
     UserResponse,
     UserWithPassword,
+    OperatorCredential,
+    BulkOperatorCreateResponse,
+    DocxExportRequest,
     TokenResponse,
     CurrentUser
 )
@@ -51,6 +54,7 @@ from app.schemas.stats import (
 
 __all__ = [
     "UserBase", "UserCreate", "UserLogin", "UserResponse", "UserWithPassword",
+    "OperatorCredential", "BulkOperatorCreateResponse", "DocxExportRequest",
     "TokenResponse", "CurrentUser",
     "SPOBase", "SPOCreate", "SPOUpdate", "SPOResponse", "SPOWithStats",
     "SpecialtyTemplateBase", "SpecialtyTemplateCreate", "SpecialtyTemplateUpdate",

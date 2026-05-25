@@ -38,6 +38,20 @@ export const adminApi = {
     return response.data
   },
 
+  async createOperatorsBulk() {
+    const response = await api.post('/admin/operators/bulk')
+    return response.data
+  },
+
+  async exportOperatorsDocx(items) {
+    const response = await api.post(
+      '/admin/operators/export-docx',
+      { items },
+      { responseType: 'blob' }
+    )
+    return response
+  },
+
   async deleteOperator(id) {
     const response = await api.delete(`/admin/operators/${id}`)
     return response.data
