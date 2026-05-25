@@ -4,11 +4,11 @@ SPO (Secondary Professional Organization) model.
 from datetime import datetime, timezone, timedelta
 
 from sqlalchemy import Column, Integer, String, DateTime
-
-MSK = timezone(timedelta(hours=3))
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
+
+MSK = timezone(timedelta(hours=3))
 
 
 class SPO(Base):
@@ -19,9 +19,14 @@ class SPO(Base):
     name = Column(String(255), nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(MSK).replace(tzinfo=None), nullable=False)
 
-    # Relationships
-    operators = relationship("User", back_populates="spo")
-    specialties = relationship("Specialty", back_populates="spo", cascade="all, delete-orphan")
+    operators = relationship("User", back_populates="spo", lazy="raise", passive_deletes=True)
+    specialties = relationship(
+        "Specialty",
+        back_populates="spo",
+        cascade="all, delete",
+        passive_deletes=True,
+        lazy="raise",
+    )
 
     def __repr__(self):
         return f"<SPO(id={self.id}, name={self.name})>"

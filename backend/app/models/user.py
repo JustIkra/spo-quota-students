@@ -30,7 +30,6 @@ class User(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(MSK).replace(tzinfo=None), nullable=False)
 
     # Unique constraint: only one operator per SPO (partial index for operators only)
-    # Note: PostgreSQL supports partial unique indexes, for SQLite we'll use application-level check
     __table_args__ = (
         Index('ix_users_spo_id_unique_operator', 'spo_id',
               unique=True,
@@ -38,7 +37,7 @@ class User(Base):
     )
 
     # Relationships
-    spo = relationship("SPO", back_populates="operators")
+    spo = relationship("SPO", back_populates="operators", lazy="raise")
 
     def __repr__(self):
         return f"<User(id={self.id}, login={self.login}, role={self.role})>"

@@ -4,11 +4,11 @@ Specialty model for educational programs assigned to SPO.
 from datetime import datetime, timezone, timedelta
 
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, UniqueConstraint
-
-MSK = timezone(timedelta(hours=3))
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
+
+MSK = timezone(timedelta(hours=3))
 
 
 class Specialty(Base):
@@ -29,10 +29,15 @@ class Specialty(Base):
         UniqueConstraint('spo_id', 'template_id', name='uq_specialty_spo_template'),
     )
 
-    # Relationships
-    spo = relationship("SPO", back_populates="specialties")
-    template = relationship("SpecialtyTemplate", back_populates="specialties")
-    students = relationship("Student", back_populates="specialty", cascade="all, delete-orphan")
+    spo = relationship("SPO", back_populates="specialties", lazy="raise")
+    template = relationship("SpecialtyTemplate", back_populates="specialties", lazy="raise")
+    students = relationship(
+        "Student",
+        back_populates="specialty",
+        cascade="all, delete",
+        passive_deletes=True,
+        lazy="raise",
+    )
 
     def __repr__(self):
         return f"<Specialty(id={self.id}, name={self.name}, quota={self.quota})>"
